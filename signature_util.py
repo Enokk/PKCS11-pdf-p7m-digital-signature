@@ -5,13 +5,6 @@ import sys
 import binascii
 
 
-####################################################################
-#       CONFIGURATION                                              #
-####################################################################
-#
-####################################################################
-
-
 class SignatureUtils:
 
     def __init__(self):
@@ -24,7 +17,6 @@ class SignatureUtils:
     def fetch_smart_card_session(self):
         ''' Return a session on the connected smart card '''
 
-        # loading drivers
         log_print("loading drivers")
         pkcs11 = PyKCS11Lib()
         for driver in self.drivers:
@@ -35,7 +27,6 @@ class SignatureUtils:
         #   sembra di sì                      #
         #######################################
 
-        # opening session
         log_print("getting slots")  # check!!! show select popup???
         slot = pkcs11.getSlotList(tokenPresent=True)[0]
         dbg_print("slot mechanisms", pkcs11.getMechanismList(slot))
@@ -43,8 +34,11 @@ class SignatureUtils:
         return pkcs11.openSession(slot)
 
     def user_login(self, session, pin):
-        ''' User login on a session.
-            param session: smart card session
+        ''' 
+            User login on a session
+
+            Params:
+                session: smart card session
         '''
 
         log_print("user login")
@@ -56,16 +50,22 @@ class SignatureUtils:
             return "error"
 
     def user_logout(self, session):
-        ''' User logout from a session.
-            param session: smart card session
+        ''' 
+            User logout from a session
+
+            Params:
+                session: smart card session
         '''
 
         log_print("user logout")
         session.logout()
 
     def fetch_private_key(self, session):
-        ''' Return smart card private key reference.
-            param session: smart card session
+        ''' 
+            Return smart card private key reference
+
+            Params:
+                session: smart card session
         '''
 
         log_print("fetching privKey")
@@ -77,19 +77,25 @@ class SignatureUtils:
         return privKey
 
     def fetch_public_key(self, session):
-        ''' Return smart card public key reference.
-            param session: smart card session
+        ''' 
+            Return smart card public key reference
+
+            Params:
+                session: smart card session
         '''
 
         log_print("fetching pubKey")
         pubKey = session.findObjects([(LowLevel.CKA_CLASS,
-            LowLevel.CKO_PUBLIC_KEY)])[0]  # check???
+                                       LowLevel.CKO_PUBLIC_KEY)])[0]  # check???
         dbg_print("public key", pubKey)
         return pubKey
 
     def fetch_certificate(self, session):
-        ''' Return smart card certificate.
-            param session: smart card session
+        ''' 
+            Return smart card certificate
+
+            Params:
+                session: smart card session
         '''
 
         log_print("fetching certificate")
@@ -100,9 +106,12 @@ class SignatureUtils:
         return certificate
 
     def get_certificate_value(self, session, certificate):
-        ''' Return certificate value.
-            param session: smart card session
-            param certificate: smart card certificate
+        ''' 
+            Return certificate value
+
+            Params:
+                session: smart card session
+                certificate: smart card certificate
         '''
 
         log_print("fetching certificate value")
@@ -113,9 +122,12 @@ class SignatureUtils:
         return certificate_value
 
     def get_certificate_issuer(self, session, certificate):
-        ''' Return certificate issuer.
-            param session: smart card session
-            param certificate: smart card certificate
+        ''' 
+            Return certificate issuer
+
+            Params:
+                session: smart card session
+                certificate: smart card certificate
         '''
 
         log_print("fetching certificate issuer")
@@ -124,11 +136,14 @@ class SignatureUtils:
         dbg_print("certificate issuer", binascii.hexlify(
             bytearray(certificate_issuer)))
         return certificate_issuer
-    
+
     def get_certificate_serial_number(self, session, certificate):
-        ''' Return certificate serial number.
-            param session: smart card session
-            param certificate: smart card certificate
+        ''' 
+            Return certificate serial number
+
+            Params:
+                session: smart card session
+                certificate: smart card certificate
         '''
 
         log_print("fetching certificate serial number")
@@ -139,9 +154,12 @@ class SignatureUtils:
         return certificate_serial_number
 
     def digest(self, session, content):
-        ''' Return the hash of content.
-            param session: smart card session
-            param content: content to hash
+        ''' 
+            Return content hash
+
+            Params:
+                session: smart card session
+                content: content to hash
         '''
 
         log_print("hashing content")
@@ -150,13 +168,16 @@ class SignatureUtils:
         return digest
 
     def signature(self, session, privKey, content):
-        ''' Sign content with privKey reference in the session.
+        ''' 
+            Sign content with privKey reference in the session
 
-            Reurn: signature in bytearray.
+            Reurn:
+                signature in bytearray
 
-            param session: smart card session.
-            param privKey: reference to the smart card private key.
-            param content: bytes to hash and sign
+            Params:
+                session: smart card session.
+                privKey: reference to the smart card private key.
+                content: bytes to hash and sign
         '''
 
         log_print("signing content")

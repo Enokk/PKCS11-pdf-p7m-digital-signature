@@ -8,7 +8,7 @@ import binascii
 #       CONFIGURATION                                              #
 ####################################################################
 # input file
-file_name = "hash_file.pdf"
+file_name = "hash_file.txt"
 # output file
 output_file = f"{file_name}.p7m"
 # to avoid insert pin manually ("" for manual insert)
@@ -17,6 +17,7 @@ default_pin = "67393714"
 
 
 class App:
+
     @staticmethod
     def get_file_content(file_name):
         ''' Return file_name content in binary form '''
@@ -31,7 +32,19 @@ class App:
             file_content = None
         finally:
             return file_content
+    
 
+    @staticmethod
+    def save_file_content(file_name, content):
+        ''' Save content to file_name '''
+        log_print(f"saving output to {file_name}")
+
+        try:
+            with open(output_file, "wb") as file:
+                file.write(output_content)
+        except:
+            err_print("impossibile aprire il file {file_name}")
+        
 
 if __name__ == "__main__":
     print("--- START!!!")
@@ -66,43 +79,39 @@ if __name__ == "__main__":
     # hashing certificate value
     certificate_value_digest = my_signer.digest(
         session, bytes(certificate_value))
-    
-    # getting certificate in asn1 form (p7m field)
-    asn1_certificates = my_p7m_encoder._certificates(bytes(certificate_value))
 
     # getting signed attributes in asn1 form (p7m field)
-    asn1_signed_attributes = my_p7m_encoder.asn1_signed_attributes(
+    signed_attributes = my_p7m_encoder.encode_signed_attributes(
         file_content_digest, certificate_value_digest)
-    # getting signed attributes in signature input form
-    to_sign_signed_attributes = my_p7m_encoder.to_sign_signed_attributes(
+    # getting bytes to be signed
+    bytes_to_sign = my_p7m_encoder.bytes_to_sign(
         file_content_digest, certificate_value_digest)
-    
+
     # fetching private key from smart card
     privKey = my_signer.fetch_private_key(session)
-    # signing signed attributes
-    # NB: needs signed attributes in signature input form
+    # signing bytes to be signed
     signed_attributes_signed = my_signer.signature(
-        session, privKey, to_sign_signed_attributes)
-    
-    # fetching issuer from certificate in asn1 form (p7m field)
+        session, privKey, bytes_to_sign)
+
+    # fetching issuer from certificate
     issuer = my_signer.get_certificate_issuer(session, certificate)
-    # fetching serial number from certificate in asn1 form (p7m field)
+    # fetching serial number from certificate
     serial_number = my_signer.get_certificate_serial_number(
         session, certificate)
-    # getting signer info in asn1 form (p7m field)
-    # NB: needs signed attributes in asn1 form
-    signer_info = my_p7m_encoder.encode_signer_info(bytes(issuer),
-        int.from_bytes(serial_number, byteorder='big', signed=True),
-        asn1_signed_attributes, bytes(signed_attributes_signed))
+    int_serial_number = int.from_bytes(
+        serial_number, byteorder='big', signed=True)
+    # getting signer info p7m field
+    signer_info = my_p7m_encoder.encode_signer_info(
+        bytes(issuer), int_serial_number, signed_attributes,
+        bytes(signed_attributes_signed))
 
     # create the p7m content
     output_content = my_p7m_encoder.make_a_p7m(
-        file_content, certificate_value, signer_info)
+        file_content, bytes(certificate_value), signer_info)
 
     # saves p7m to file
-    with open(output_file, "wb") as file:
-            file.write(output_content)
-
+    App().save_file_content(output_file, output_content)
+    
     # logout from the session
     my_signer.user_logout(session)
 
