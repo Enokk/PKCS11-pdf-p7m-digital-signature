@@ -1,4 +1,10 @@
 __pycache__/
 .vscode/
+signed/*
+uploads/*
 hash*
 playground.py
+
+# exception to the rules
+!signed/.gitkeep
+!uploads/.gitkeep 

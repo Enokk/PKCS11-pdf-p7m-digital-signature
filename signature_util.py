@@ -39,6 +39,7 @@ class SignatureUtils:
 
             Params:
                 session: smart card session
+                pin: user pin
         '''
 
         log_print("user login")
