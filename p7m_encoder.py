@@ -31,7 +31,7 @@ class P7mEncoder():
 
             Param:
                 content: file content to sign
-                certificate_value: value field of the smart card certificate (bytes)
+                certificate_value: value field of the smart card certificate
                 signer_info: signer info in asn1 form
         '''
 
@@ -108,7 +108,7 @@ class P7mEncoder():
                 content_hash: content digest
                 certificate_hash: certificate digest
         '''
-        
+
         signed_attributes = Encoder()
         signed_attributes.start()
 
@@ -127,7 +127,7 @@ class P7mEncoder():
                 content_hash: content digest
                 certificate_hash: certificate digest
         '''
-        
+
         signed_attributes = Encoder()
         signed_attributes.start()
 
@@ -141,14 +141,14 @@ class P7mEncoder():
 
     def _get_signed_attributes(self, content_hash, certificate_hash):
         ''' Return core signed attributes
-                to get the p7m field call encode_signed_attributes instead
-                to get the signature input call bytes_to_sign instead
+                to get the p7m field call `encode_signed_attributes` instead
+                to get the signature input call `bytes_to_sign` instead
 
             Params:
                 content_hash: content digest
                 certificate_hash: certificate digest
         '''
-        
+
         signed_attributes = Encoder()
         signed_attributes.start()
 
@@ -170,12 +170,13 @@ class P7mEncoder():
         signed_attributes.enter(Numbers.Sequence)  # 1
         signed_attributes.write(PKCS9_message_digest, Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2
-        signed_attributes.write(bytes(content_hash), Numbers.OctetString)
+        signed_attributes.write(content_hash, Numbers.OctetString)
         signed_attributes.leave()  # 2
         signed_attributes.leave()  # 1
 
         signed_attributes.enter(Numbers.Sequence)  # 1
-        signed_attributes.write(signing_certificate_v2, Numbers.ObjectIdentifier)
+        signed_attributes.write(signing_certificate_v2,
+                                Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2
         signed_attributes.enter(Numbers.Sequence)  # 3
         signed_attributes.enter(Numbers.Sequence)  # 4
@@ -183,7 +184,7 @@ class P7mEncoder():
         signed_attributes.enter(Numbers.Sequence)  # 6
         signed_attributes.write(SHA256, Numbers.ObjectIdentifier)
         signed_attributes.leave()  # 6
-        signed_attributes.write(bytes(certificate_hash), Numbers.OctetString)
+        signed_attributes.write(certificate_hash, Numbers.OctetString)
         signed_attributes.leave()  # 5
         signed_attributes.leave()  # 4
         signed_attributes.leave()  # 3
@@ -216,6 +217,7 @@ class P7mEncoder():
 
     def _content_info(self, content):
         '''Return p7m content info field'''
+
         data_content = Encoder()
         data_content.start()
 
@@ -228,8 +230,9 @@ class P7mEncoder():
 
         return data_content.output()
 
-
     @staticmethod
     def get_timestamp():
+        ''' Return UTC timestamp in p7m compatible format '''
+
         timestamp = datetime.now().strftime("%y%m%d%H%M%SZ")
         return timestamp.encode()

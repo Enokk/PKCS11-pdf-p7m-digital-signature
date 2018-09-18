@@ -1,6 +1,7 @@
-from flask import Flask, session, render_template, request, url_for, send_from_directory#, redirect
+from flask import Flask, session, render_template, request, url_for, send_from_directory  # , redirect
 from werkzeug.utils import secure_filename
 from os import path, remove
+from shutil import move
 from app import App
 
 # Initialize the Flask application
@@ -47,36 +48,47 @@ def select_files():
 
 @server.route("/upload", methods=["POST"])
 def upload():
-    uploaded_files = request.files.getlist("file[]")
-    files_to_sign = []
-    for file in uploaded_files:
-        if file and allowed_file(file.filename):
+    uploaded_files = request.files.getlist("files[]")
+    file_paths_to_sign = []
+    # foreach file uploaded
+    for uploaded_file in uploaded_files:
+        if uploaded_file and allowed_file(uploaded_file.filename):
             # Make the filename safe, remove unsupported chars
-            filename = secure_filename(file.filename)
+            file_name = secure_filename(uploaded_file.filename)
+            # Save file in upload folder
+            uploaded_file_path = path.join(
+                server.config["UPLOAD_FOLDER"], file_name)
+            uploaded_file.save(uploaded_file_path)
+            # Path added to files to sign
+            file_paths_to_sign.append(uploaded_file_path)
 
-            file.save(path.join(server.config['UPLOAD_FOLDER'], filename))
-            files_to_sign.append(filename)
-    
     signed_files = []
-    for file in files_to_sign:
-        signed_file = App().sign_p7m(file, server.config['SIGNED_FOLDER'] , session["pin"])
-        if signed_file == "":
-            ## ERROR!
+    # foreach file to sign
+    for file_path_to_sign in file_paths_to_sign:
+        # file signature
+        signed_file_paths = App().sign_p7m(file_path_to_sign, session["pin"])
+        if signed_file_paths == "":
+            # TODO ERROR HANDLING!
             pass
-        signed_files.append(signed_file)
-        remove(path.join(server.config['UPLOAD_FOLDER'], file))
-    
-    
-    return render_template('upload.html', filenames=signed_files)
+        # File name added to signed files
+        signed_file_name = path.basename(signed_file_paths)
+        signed_files.append(signed_file_name)
+        # Move file to signed folder
+        move(signed_file_paths,
+             path.join(server.config["SIGNED_FOLDER"], signed_file_name))
+        # Delete uploaded file
+        remove(file_path_to_sign)
+
+    return render_template("upload.html", filenames=signed_files)
 
 
-@server.route('/uploads/<filename>')
+@server.route("/uploads/<filename>")
 def uploaded_file(filename):
     return send_from_directory(
-        server.config['SIGNED_FOLDER'], filename)
+        server.config["SIGNED_FOLDER"], filename)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     server.run(
         host="127.0.0.1",
         port=int("8090"),

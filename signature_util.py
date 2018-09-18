@@ -1,26 +1,28 @@
 from PyKCS11 import PyKCS11Lib, Mechanism, LowLevel
-from os import path, devnull
+from os import path, listdir, devnull, fsdecode
 from console_output_util import log_print, dbg_print, err_print
 import sys
 import binascii
 
 
+####################################################################
+#       CONFIGURATION                                              #
+####################################################################
+# driver directory
+driver_dir = "drivers"
+####################################################################
+
+
 class SignatureUtils:
 
-    def __init__(self):
-        self.drivers = {
-            "pkcs11_dll_i": path.join(".", "driver", "bit4ipki.dll"),
-            "pkcs11_dll_x": path.join(".", "driver", "bit4xpki.dll")
-        }
-        dbg_print("driver paths", self.drivers)
-
     def fetch_smart_card_session(self):
-        ''' Return a session on the connected smart card '''
+        ''' Return a `session` on the connected smart card '''
 
         log_print("loading drivers")
         pkcs11 = PyKCS11Lib()
-        for driver in self.drivers:
-            pkcs11.load(self.drivers[driver])
+        for file in listdir(driver_dir):
+            dbg_print("driver", fsdecode(file))
+            pkcs11.load(file)
         #######################################
         # ^ BASTA DAVVERO CARICARLI TUTTI???? #
         #######################################
@@ -35,7 +37,7 @@ class SignatureUtils:
 
     def user_login(self, session, pin):
         ''' 
-            User login on a session
+            User login on a `session` using `pin`
 
             Params:
                 session: smart card session
@@ -44,7 +46,7 @@ class SignatureUtils:
 
         log_print("user login")
         try:
-            session.login(pin)  # to keep in memory!!!
+            session.login(pin)
             return None
         except:
             err_print("incorrect pin")
@@ -52,7 +54,7 @@ class SignatureUtils:
 
     def user_logout(self, session):
         ''' 
-            User logout from a session
+            User logout from a `session`
 
             Params:
                 session: smart card session
@@ -70,8 +72,9 @@ class SignatureUtils:
         '''
 
         log_print("fetching privKey")
+        # TODO check for right key
         privKey = session.findObjects(
-            [(LowLevel.CKA_CLASS, LowLevel.CKO_PRIVATE_KEY)])[0]  # check???
+            [(LowLevel.CKA_CLASS, LowLevel.CKO_PRIVATE_KEY)])[0]
         # if you don't print privKey you get a sign general error -.-
         print(privKey, file=open(devnull, "w"))  # to avoid general error
         dbg_print("private key", privKey)
@@ -102,13 +105,14 @@ class SignatureUtils:
         log_print("fetching certificate")
         certificates = session.findObjects(
             [(LowLevel.CKA_CLASS, LowLevel.CKO_CERTIFICATE)])
+        # TODO check for right certificate
         certificate = certificates[1]
         dbg_print("certificate", certificate)
         return certificate
 
     def get_certificate_value(self, session, certificate):
         ''' 
-            Return certificate value
+            Return the value of `certificate`
 
             Params:
                 session: smart card session
@@ -119,12 +123,12 @@ class SignatureUtils:
         certificate_value = session.getAttributeValue(
             certificate, [LowLevel.CKA_VALUE])[0]
         dbg_print("certificate value", binascii.hexlify(
-            bytearray(certificate_value)))
-        return certificate_value
+            bytes(certificate_value)))
+        return bytes(certificate_value)
 
     def get_certificate_issuer(self, session, certificate):
         ''' 
-            Return certificate issuer
+            Return the issuer of `certificate`
 
             Params:
                 session: smart card session
@@ -135,12 +139,12 @@ class SignatureUtils:
         certificate_issuer = session.getAttributeValue(
             certificate, [LowLevel.CKA_ISSUER])[0]
         dbg_print("certificate issuer", binascii.hexlify(
-            bytearray(certificate_issuer)))
-        return certificate_issuer
+            bytes(certificate_issuer)))
+        return bytes(certificate_issuer)
 
     def get_certificate_serial_number(self, session, certificate):
         ''' 
-            Return certificate serial number
+            Return the serial number of `certificate`
 
             Params:
                 session: smart card session
@@ -148,15 +152,16 @@ class SignatureUtils:
         '''
 
         log_print("fetching certificate serial number")
-        certificate_serial_number = session.getAttributeValue(
+        serial_number = session.getAttributeValue(
             certificate, [LowLevel.CKA_SERIAL_NUMBER])[0]
-        dbg_print("certificate serial number", binascii.hexlify(
-            bytearray(certificate_serial_number)))
-        return certificate_serial_number
+        int_serial_number = int.from_bytes(
+            serial_number, byteorder='big', signed=True)
+        dbg_print("certificate serial number", str(int_serial_number))
+        return int_serial_number
 
     def digest(self, session, content):
         ''' 
-            Return content hash
+            Return `content` hash
 
             Params:
                 session: smart card session
@@ -165,12 +170,12 @@ class SignatureUtils:
 
         log_print("hashing content")
         digest = session.digest(content, Mechanism(LowLevel.CKM_SHA256))
-        dbg_print("digest", binascii.hexlify(bytearray(digest)))
-        return digest
+        dbg_print("digest", binascii.hexlify(bytes(digest)))
+        return bytes(digest)
 
     def signature(self, session, privKey, content):
         ''' 
-            Sign content with privKey reference in the session
+            Sign `content` with `privKey` reference
 
             Reurn:
                 signature in bytearray
@@ -184,5 +189,5 @@ class SignatureUtils:
         log_print("signing content")
         signature = session.sign(privKey, content, Mechanism(
             LowLevel.CKM_SHA256_RSA_PKCS, None))
-        dbg_print("signature", binascii.hexlify(bytearray(signature)))
-        return signature
+        dbg_print("signature", binascii.hexlify(bytes(signature)))
+        return bytes(signature)
