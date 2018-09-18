@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory
+from flask import Flask, session, render_template, request, url_for, send_from_directory#, redirect
 from werkzeug.utils import secure_filename
 from os import path, remove
 from app import App
@@ -10,29 +10,42 @@ server = Flask(__name__)
 #       CONFIGURATION                                              #
 ####################################################################
 # Path to the upload directory
-server.config['UPLOAD_FOLDER'] = path.join("uploads", "")
+server.config["UPLOAD_FOLDER"] = path.join("uploads", "")
 # Path to the signed files directory
-server.config['SIGNED_FOLDER'] = path.join("signed", "")
+server.config["SIGNED_FOLDER"] = path.join("signed", "")
 # Allowed extension
-server.config['ALLOWED_EXTENSIONS'] = set(['txt', 'pdf'])
+server.config["ALLOWED_EXTENSIONS"] = set(["txt", "pdf"])
 # Session keys
 secretKey8 = "0f3f9fcb1a10cae2"
 secretKey16 = "d3e72b4bcf1c82e7fd4815c3960edf42"
 ####################################################################
 
 
+server.secret_key = secretKey8
+
+
 def allowed_file(file_name):
     ''' Returns if `file_name` is of an allowed extension '''
-    return '.' in file_name and \
-        file_name.rsplit('.', 1)[1] in server.config['ALLOWED_EXTENSIONS']
+    return "." in file_name and \
+        file_name.rsplit(".", 1)[1] in server.config["ALLOWED_EXTENSIONS"]
 
 
-@server.route('/')
+@server.route("/")
 def index():
-    return render_template('index.html')
+    if "pin" in session:
+        return render_template("select_files.html")
+    else:
+        return render_template("insert_pin.html")
 
 
-@server.route('/upload', methods=['POST'])
+@server.route("/select_files", methods=["GET", "POST"])
+def select_files():
+    session["pin"] = request.form["pin"]
+    print(session["pin"])
+    return render_template("select_files.html")
+
+
+@server.route("/upload", methods=["POST"])
 def upload():
     uploaded_files = request.files.getlist("file[]")
     files_to_sign = []
@@ -45,9 +58,8 @@ def upload():
             files_to_sign.append(filename)
     
     signed_files = []
-    # SIGNATURE
     for file in files_to_sign:
-        signed_file = App().sign_p7m(file, server.config['SIGNED_FOLDER'] , "67393714")
+        signed_file = App().sign_p7m(file, server.config['SIGNED_FOLDER'] , session["pin"])
         if signed_file == "":
             ## ERROR!
             pass
