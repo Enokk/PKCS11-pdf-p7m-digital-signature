@@ -25,17 +25,17 @@ class App:
                 pin: smart card user pin
         '''
 
-        my_signer = SignatureUtils()
-        my_p7m_encoder = P7mEncoder()
-
         # getting a smart card session
-        session = my_signer.fetch_smart_card_session()
+        try:
+            sessions = SignatureUtils.fetch_smart_card_sessions()
+        except:
+            raise
 
         # login on the session
-        error = my_signer.user_login(session, pin)
-        if error != None:
-            err_print("Exit signature procedure!")
-            exit
+        try:
+            session = SignatureUtils.user_login(sessions, pin)
+        except:
+            raise
 
         # fetching file content
         file_content = App().get_file_content(file_path)
@@ -43,42 +43,42 @@ class App:
             err_print("Exit signature procedure!")
             exit
         # hashing file content
-        file_content_digest = my_signer.digest(session, file_content)
+        file_content_digest = SignatureUtils.digest(session, file_content)
 
         # fetching smart card certificate
-        certificate = my_signer.fetch_certificate(session)
+        certificate = SignatureUtils.fetch_certificate(session)
         # getting certificate value
-        certificate_value = my_signer.get_certificate_value(
+        certificate_value = SignatureUtils.get_certificate_value(
             session, certificate)
         # hashing certificate value
-        certificate_value_digest = my_signer.digest(
+        certificate_value_digest = SignatureUtils.digest(
             session, certificate_value)
 
         # getting signed attributes p7m field
-        signed_attributes = my_p7m_encoder.encode_signed_attributes(
+        signed_attributes = P7mEncoder.encode_signed_attributes(
             file_content_digest, certificate_value_digest)
         # getting bytes to be signed
-        bytes_to_sign = my_p7m_encoder.bytes_to_sign(
+        bytes_to_sign = P7mEncoder.bytes_to_sign(
             file_content_digest, certificate_value_digest)
 
         # fetching private key from smart card
-        privKey = my_signer.fetch_private_key(session)
+        privKey = SignatureUtils.fetch_private_key(session, certificate)
         # signing bytes to be signed
-        signed_attributes_signed = my_signer.signature(
+        signed_attributes_signed = SignatureUtils.signature(
             session, privKey, bytes_to_sign)
 
         # getting issuer from certificate
-        issuer = my_signer.get_certificate_issuer(session, certificate)
+        issuer = SignatureUtils.get_certificate_issuer(session, certificate)
         # getting serial number from certificate
-        serial_number = my_signer.get_certificate_serial_number(
+        serial_number = SignatureUtils.get_certificate_serial_number(
             session, certificate)
         # getting signer info p7m field
-        signer_info = my_p7m_encoder.encode_signer_info(
+        signer_info = P7mEncoder.encode_signer_info(
             issuer, serial_number, signed_attributes,
             signed_attributes_signed)
 
         # create the p7m content
-        output_content = my_p7m_encoder.make_a_p7m(
+        output_content = P7mEncoder.make_a_p7m(
             file_content, certificate_value, signer_info)
 
         # saves p7m to file
@@ -86,7 +86,7 @@ class App:
         App().save_file_content(signed_file_path, output_content)
 
         # logout from the session
-        my_signer.user_logout(session)
+        SignatureUtils.user_logout(session)
 
         return signed_file_path
 
@@ -100,10 +100,9 @@ class App:
                 file_content = file.read()
                 dbg_print("file_content", f"[{file_content}]")
         except:
-            err_print("impossibile aprire il file {file_path}")
-            file_content = None
-        finally:
-            return file_content
+            raise
+        
+        return file_content
 
     @staticmethod
     def save_file_content(file_path, content):
@@ -114,4 +113,4 @@ class App:
             with open(file_path, "wb") as file:
                 file.write(content)
         except:
-            err_print("impossibile aprire il file {file_path}")
+            raise

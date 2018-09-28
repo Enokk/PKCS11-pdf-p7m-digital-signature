@@ -23,9 +23,10 @@ signing_certificate_v2 = "1.2.840.113549.1.9.16.2.47"
 ####################################################################
 
 
-class P7mEncoder():
+class P7mEncoder:
 
-    def make_a_p7m(self, content, certificate_value, signer_info):
+    @staticmethod
+    def make_a_p7m(content, certificate_value, signer_info):
         '''
             Return a well formed complete p7m
 
@@ -43,11 +44,11 @@ class P7mEncoder():
         p7m.write(PKCS7_signed_data, Numbers.ObjectIdentifier)
         p7m.enter(zero_tag, Classes.Context)  # 2
         p7m.enter(Numbers.Sequence)  # 3
-        p7m._emit(self._version_number())
+        p7m._emit(P7mEncoder._version_number())
         p7m.enter(Numbers.Set)  # 4
-        p7m._emit(self._digest_algorithm())
+        p7m._emit(P7mEncoder._digest_algorithm())
         p7m.leave()  # 4
-        p7m._emit(self._content_info(content))
+        p7m._emit(P7mEncoder._content_info(content))
         p7m.enter(zero_tag, Classes.Context)  # 4
         p7m._emit(certificate_value)
         p7m.leave()  # 4
@@ -58,7 +59,8 @@ class P7mEncoder():
 
         return p7m.output()
 
-    def encode_signer_info(self, issuer, serial_number,
+    @staticmethod
+    def encode_signer_info(issuer, serial_number,
                            signed_attributes, signed_bytes):
         ''' Return a well formed signer info p7m field
 
@@ -75,7 +77,7 @@ class P7mEncoder():
         log_print("encoding signer info")
         signer_info.enter(Numbers.Set)  # 1
         signer_info.enter(Numbers.Sequence)  # 2
-        signer_info._emit(self._version_number())
+        signer_info._emit(P7mEncoder._version_number())
 
         signer_info.enter(Numbers.Sequence)  # 3
         signer_info._emit(issuer)
@@ -101,7 +103,8 @@ class P7mEncoder():
 
         return signer_info.output()
 
-    def encode_signed_attributes(self, content_hash, certificate_hash):
+    @staticmethod
+    def encode_signed_attributes(content_hash, certificate_hash):
         ''' Return a well formed signed attributes p7m field
 
             Params:
@@ -114,13 +117,14 @@ class P7mEncoder():
 
         log_print("encoding signed attributes")
         signed_attributes.enter(zero_tag, Classes.Context)
-        signed_attributes._emit(self._get_signed_attributes(
+        signed_attributes._emit(P7mEncoder._get_signed_attributes(
             content_hash, certificate_hash))
         signed_attributes.leave()
 
         return signed_attributes.output()
 
-    def bytes_to_sign(self, content_hash, certificate_hash):
+    @staticmethod
+    def bytes_to_sign(content_hash, certificate_hash):
         ''' Return the p7m part that needs to be signed
 
             Params:
@@ -133,13 +137,14 @@ class P7mEncoder():
 
         log_print("building bytes to sign")
         signed_attributes.enter(Numbers.Set)
-        signed_attributes._emit(self._get_signed_attributes(
+        signed_attributes._emit(P7mEncoder._get_signed_attributes(
             content_hash, certificate_hash))
         signed_attributes.leave()
 
         return signed_attributes.output()
 
-    def _get_signed_attributes(self, content_hash, certificate_hash):
+    @staticmethod
+    def _get_signed_attributes(content_hash, certificate_hash):
         ''' Return core signed attributes
                 to get the p7m field call `encode_signed_attributes` instead
                 to get the signature input call `bytes_to_sign` instead
@@ -163,7 +168,7 @@ class P7mEncoder():
         signed_attributes.enter(Numbers.Sequence)  # 1
         signed_attributes.write(signing_time, Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2
-        signed_attributes.write(self.get_timestamp(), UTCTime)
+        signed_attributes.write(P7mEncoder._get_timestamp(), UTCTime)
         signed_attributes.leave()  # 2
         signed_attributes.leave()  # 1
 
@@ -193,7 +198,8 @@ class P7mEncoder():
 
         return signed_attributes.output()
 
-    def _version_number(self):
+    @staticmethod
+    def _version_number():
         '''Return p7m version number field (always 1)'''
         version_number = Encoder()
         version_number.start()
@@ -203,7 +209,8 @@ class P7mEncoder():
 
         return version_number.output()
 
-    def _digest_algorithm(self):
+    @staticmethod
+    def _digest_algorithm():
         '''Return p7m digest algorithm field (SHA256)'''
         digest_algorithm = Encoder()
         digest_algorithm.start()
@@ -215,7 +222,8 @@ class P7mEncoder():
 
         return digest_algorithm.output()
 
-    def _content_info(self, content):
+    @staticmethod
+    def _content_info(content):
         '''Return p7m content info field'''
 
         data_content = Encoder()
@@ -231,7 +239,7 @@ class P7mEncoder():
         return data_content.output()
 
     @staticmethod
-    def get_timestamp():
+    def _get_timestamp():
         ''' Return UTC timestamp in p7m compatible format '''
 
         timestamp = datetime.now().strftime("%y%m%d%H%M%SZ")
