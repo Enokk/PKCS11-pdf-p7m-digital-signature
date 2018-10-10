@@ -1,10 +1,13 @@
 __pycache__/
 .vscode/
+log/*
 signed/*
 uploads/*
+digiSign.log
 hash*
 playground.py
 
 # exception to the rules
+!log/.gitkeep
 !signed/.gitkeep
 !uploads/.gitkeep 

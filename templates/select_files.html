@@ -8,14 +8,16 @@
 <body>
     <div class="container">
         <div class="header">
-            <h3 class="text-muted">File Uploader</h3>
+            <h3 class="text-muted">Digital Signature</h3>
         </div>
         <hr />
         <div>
-
             <form action="upload" method="post" enctype="multipart/form-data">
-                <input type="file" multiple="" name="files[]" class="span3" /><br />
-                <input type="submit" value="Upload" class="span2">
+                <input type="file" multiple="" name="files[]" /><br />
+                output type:
+                <input type="radio" name="type" value="p7m" checked="checked" /> p7m
+                <input type="radio" name="type" value="pdf" /> pdf<br /><br />
+                <input type="submit" value="Sign">
             </form>
         </div>
     </div>

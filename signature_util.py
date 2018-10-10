@@ -1,8 +1,6 @@
+from my_logger import MyLogger
+from os import listdir, devnull, fsdecode
 from PyKCS11 import PyKCS11Lib, Mechanism, LowLevel
-from os import path, listdir, devnull, fsdecode
-from console_output_util import log_print, dbg_print, err_print
-import sys
-import binascii
 
 
 ####################################################################
@@ -10,7 +8,15 @@ import binascii
 ####################################################################
 # driver directory
 driver_dir = "drivers"
+# logger
+logger = MyLogger.__call__().my_logger()
 ####################################################################
+
+
+# custom exceptions
+class SmartCardConnectionError(ConnectionError):
+    ''' Raised when something goes wrong with the smart card '''
+    pass
 
 
 class SignatureUtils:
@@ -19,28 +25,44 @@ class SignatureUtils:
     def fetch_smart_card_sessions():
         ''' Return a `session` list for the connected smart cards '''
 
-        log_print("loading drivers")
+        logger.info("loading drivers")
         pkcs11 = PyKCS11Lib()
-        for file in listdir(driver_dir):
-            dbg_print("driver", fsdecode(file))
-            pkcs11.load(file)
+        driver_loaded = False
 
+        # try with default
         try:
-            slots = SignatureUtils._fetch_slots(pkcs11)
+            pkcs11.load()
+            driver_loaded = True
         except:
-            raise
+            logger.warning("no default driver")
 
+        # anyway load known drivers
+        for file in listdir(driver_dir):
+            try:
+                pkcs11.load(file)
+                logger.info(f"driver {fsdecode(file)} loaded")
+                driver_loaded = True
+            except:
+                logger.warning(f"driver {fsdecode(file)} NOT loaded")
+                continue
+
+        # cannot load any driver file
+        if(not driver_loaded):
+            raise SmartCardConnectionError("No driver found")
+
+        slots = SignatureUtils._fetch_slots(pkcs11)
+
+        # TODO select slot (and log something?)
         sessions = []
         for slot in slots:
             try:
-                log_print(f"opening session for slot{slot}")
                 session = pkcs11.openSession(slot)
                 sessions.append(session)
             except:
                 continue
 
         if(len(sessions) < 1):
-            raise ConnectionError("Impossible to open a session")
+            raise SmartCardConnectionError("Can not open any session")
 
         return sessions
 
@@ -48,15 +70,15 @@ class SignatureUtils:
     def _fetch_slots(pkcs11_lib):
         ''' Return a `slot list` (connected Smart Cards) '''
 
-        log_print("getting slots")
+        logger.info("getting slots")
         try:
             slots = pkcs11_lib.getSlotList(tokenPresent=True)
             if(len(slots) < 1):
-                raise ConnectionError("No Smart Card slot found!")
+                raise Exception()  # only to get to the external except block
             else:
                 return slots
         except:
-            raise
+            raise SmartCardConnectionError("No smart card slot found")
 
     @staticmethod
     def user_login(sessions, pin):
@@ -71,7 +93,7 @@ class SignatureUtils:
                 the logged in session
         '''
 
-        log_print("user login")
+        logger.info("user login")
         for session in sessions:
             try:
                 session.login(pin)
@@ -79,8 +101,7 @@ class SignatureUtils:
             except:
                 continue
 
-        raise ValueError(
-            "Can not login on sessions provided. Check Smart Card or PIN")
+        raise SmartCardConnectionError("Can not login on any sessions provided")
 
     @staticmethod
     def user_logout(session):
@@ -91,7 +112,7 @@ class SignatureUtils:
                 session: smart card session
         '''
 
-        log_print("user logout")
+        logger.info("user logout")
         session.logout()
 
     @staticmethod
@@ -103,12 +124,15 @@ class SignatureUtils:
                 session: smart card session
         '''
 
-        log_print("fetching certificate")
-        certificates = session.findObjects(
-            [(LowLevel.CKA_CLASS, LowLevel.CKO_CERTIFICATE)])
+        logger.info("fetching certificate")
+        try:
+            certificates = session.findObjects(
+                [(LowLevel.CKA_CLASS, LowLevel.CKO_CERTIFICATE)])
+        except:
+            raise SmartCardConnectionError("Certificate not found")
+
         # TODO check for right certificate
         certificate = certificates[1]
-        dbg_print("certificate", certificate)
         return certificate
 
     @staticmethod
@@ -121,15 +145,13 @@ class SignatureUtils:
                 certificate: smart card certificate
         '''
 
-        log_print("fetching certificate value")
+        logger.info("fetching certificate value")
         try:
             certificate_value = session.getAttributeValue(
                 certificate, [LowLevel.CKA_VALUE])[0]
         except:
-            raise
+            raise SmartCardConnectionError("Certificate has no valid value")
 
-        dbg_print("certificate value", binascii.hexlify(
-            bytes(certificate_value)))
         return bytes(certificate_value)
 
     @staticmethod
@@ -142,15 +164,13 @@ class SignatureUtils:
                 certificate: smart card certificate
         '''
 
-        log_print("fetching certificate issuer")
+        logger.info("fetching certificate issuer")
         try:
             certificate_issuer = session.getAttributeValue(
                 certificate, [LowLevel.CKA_ISSUER])[0]
         except:
-            raise
-            
-        dbg_print("certificate issuer", binascii.hexlify(
-            bytes(certificate_issuer)))
+            raise SmartCardConnectionError("Certificate has no valid issuer")
+
         return bytes(certificate_issuer)
 
     @staticmethod
@@ -163,16 +183,18 @@ class SignatureUtils:
                 certificate: smart card certificate
         '''
 
-        log_print("fetching certificate serial number")
+        logger.info("fetching certificate serial number")
         try:
             serial_number = session.getAttributeValue(
                 certificate, [LowLevel.CKA_SERIAL_NUMBER])[0]
         except:
-            raise
-            
-        int_serial_number = int.from_bytes(
-            serial_number, byteorder='big', signed=True)
-        dbg_print("certificate serial number", str(int_serial_number))
+            raise SmartCardConnectionError("Certificate has no valid serial number")
+
+        try:
+            int_serial_number = int.from_bytes(
+                serial_number, byteorder='big', signed=True)
+        except:
+            raise SmartCardConnectionError("Can not cast certificate serial number to integer")
         return int_serial_number
 
     @staticmethod
@@ -185,7 +207,7 @@ class SignatureUtils:
                 certificate: certificate connected to the key
         '''
 
-        log_print("fetching privKey")
+        logger.info("fetching private key")
         try:
             # getting the certificate id
             identifier = session.getAttributeValue(
@@ -195,10 +217,9 @@ class SignatureUtils:
                 (LowLevel.CKA_CLASS, LowLevel.CKO_PRIVATE_KEY),
                 (LowLevel.CKA_ID, identifier)])[0]
         except:
-            raise
+            raise SmartCardConnectionError("Certificate has no valid private key")
         # if you don't print privKey you get a sign general error -.-
         print(privKey, file=open(devnull, "w"))  # to avoid general error
-        dbg_print("private key", privKey)
         return privKey
 
     @staticmethod
@@ -211,7 +232,7 @@ class SignatureUtils:
                 certificate: certificate connected to the key
         '''
 
-        log_print("fetching pubKey")
+        logger.info("fetching public key")
         try:
             # getting the certificate id
             identifier = session.getAttributeValue(
@@ -221,8 +242,7 @@ class SignatureUtils:
                 (LowLevel.CKA_CLASS, LowLevel.CKO_PUBLIC_KEY),
                 (LowLevel.CKA_ID, identifier)])[0]
         except:
-            raise
-        dbg_print("public key", pubKey)
+            raise SmartCardConnectionError("Certificate has no valid public key")
         return pubKey
 
     @staticmethod
@@ -235,13 +255,12 @@ class SignatureUtils:
                 content: content to hash
         '''
 
-        log_print("hashing content")
+        logger.info("hashing content")
         try:
             digest = session.digest(content, Mechanism(LowLevel.CKM_SHA256))
         except:
-            raise
-            
-        dbg_print("digest", binascii.hexlify(bytes(digest)))
+            raise SmartCardConnectionError("Failed on digest content")
+
         return bytes(digest)
 
     @staticmethod
@@ -258,12 +277,11 @@ class SignatureUtils:
                 content: bytes to hash and sign
         '''
 
-        log_print("signing content")
+        logger.info("signing content")
         try:
             signature = session.sign(privKey, content, Mechanism(
                 LowLevel.CKM_SHA256_RSA_PKCS, None))
         except:
-            raise
-            
-        dbg_print("signature", binascii.hexlify(bytes(signature)))
+            raise SmartCardConnectionError("Failed on sign content")
+
         return bytes(signature)

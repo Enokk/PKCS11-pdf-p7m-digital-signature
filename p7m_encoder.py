@@ -1,7 +1,6 @@
 from asn1 import Encoder, Numbers, Classes
-from console_output_util import log_print, dbg_print, err_print
-import binascii
 from datetime import datetime
+from my_logger import MyLogger
 
 
 ####################################################################
@@ -20,6 +19,8 @@ SHA256 = "2.16.840.1.101.3.4.2.1"
 RSA = "1.2.840.113549.1.1.1"
 signing_time = "1.2.840.113549.1.9.5"
 signing_certificate_v2 = "1.2.840.113549.1.9.16.2.47"
+# logger
+logger = MyLogger.__call__().my_logger()
 ####################################################################
 
 
@@ -39,7 +40,7 @@ class P7mEncoder:
         p7m = Encoder()
         p7m.start()
 
-        log_print("encoding p7m")
+        logger.info("encoding p7m")
         p7m.enter(Numbers.Sequence)  # 1
         p7m.write(PKCS7_signed_data, Numbers.ObjectIdentifier)
         p7m.enter(zero_tag, Classes.Context)  # 2
@@ -74,7 +75,7 @@ class P7mEncoder:
         signer_info = Encoder()
         signer_info.start()
 
-        log_print("encoding signer info")
+        logger.info("encoding signer info")
         signer_info.enter(Numbers.Set)  # 1
         signer_info.enter(Numbers.Sequence)  # 2
         signer_info._emit(P7mEncoder._version_number())
@@ -115,7 +116,7 @@ class P7mEncoder:
         signed_attributes = Encoder()
         signed_attributes.start()
 
-        log_print("encoding signed attributes")
+        logger.info("encoding signed attributes")
         signed_attributes.enter(zero_tag, Classes.Context)
         signed_attributes._emit(P7mEncoder._get_signed_attributes(
             content_hash, certificate_hash))
@@ -135,7 +136,7 @@ class P7mEncoder:
         signed_attributes = Encoder()
         signed_attributes.start()
 
-        log_print("building bytes to sign")
+        logger.info("building bytes to sign")
         signed_attributes.enter(Numbers.Set)
         signed_attributes._emit(P7mEncoder._get_signed_attributes(
             content_hash, certificate_hash))
@@ -157,7 +158,6 @@ class P7mEncoder:
         signed_attributes = Encoder()
         signed_attributes.start()
 
-        log_print("core signed attributes")
         signed_attributes.enter(Numbers.Sequence)  # 1
         signed_attributes.write(PKCS9_content_type, Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2

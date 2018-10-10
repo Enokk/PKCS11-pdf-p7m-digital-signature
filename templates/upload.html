@@ -18,10 +18,16 @@
                 <li><a href="{{url_for('uploaded_file', filename=file)}}">{{file}}</a></li>
                 {% endfor %}
             </ul>
+            Error file list
+            <ul>
+                {% for file in errornames %}
+                <li>{{file}}</li>
+                {% endfor %}
+            </ul>
         </div>
+        <div>
         <hr />
             <a href="/">Back to file upload</a>
-        <div>
 
         </div>
     </div>
