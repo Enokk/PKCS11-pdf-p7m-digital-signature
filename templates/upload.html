@@ -12,18 +12,22 @@
         </div>
         <hr />
         <div>
+            {% if filenames %}
             Signed file list
             <ul>
                 {% for file in filenames %}
                 <li><a href="{{url_for('uploaded_file', filename=file)}}">{{file}}</a></li>
                 {% endfor %}
             </ul>
+            {% endif %}
+            {% if errornames %}
             Error file list
             <ul>
                 {% for file in errornames %}
                 <li>{{file}}</li>
                 {% endfor %}
             </ul>
+            {% endif %}
         </div>
         <div>
         <hr />

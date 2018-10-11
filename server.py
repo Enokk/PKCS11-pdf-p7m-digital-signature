@@ -379,5 +379,5 @@ if __name__ == "__main__":
     server.run(
         host="127.0.0.1",
         port=int("8090"),
-        debug=True
+        debug=False
     )

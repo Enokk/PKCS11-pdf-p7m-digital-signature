@@ -2,6 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 
+_50KB = 51200
 
 class SingletonType(type):
     _instances = {}
@@ -25,7 +26,7 @@ class MyLogger(object, metaclass=SingletonType):
         self._logger.setLevel(logging.INFO)
 
         handler = RotatingFileHandler(
-            'log/digiSign.log', maxBytes=51200-51000, backupCount=10)
+            'log/digiSign.log', maxBytes=_50KB, backupCount=10)
         formatter = logging.Formatter(
             '%(asctime)s - [%(levelname)s | %(filename)s:%(lineno)s] > %(message)s')
         handler.setFormatter(formatter)
