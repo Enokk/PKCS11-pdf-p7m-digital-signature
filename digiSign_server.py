@@ -1,9 +1,9 @@
-from app import App
 from datetime import datetime, timedelta
+from digiSign_lib import DigiSignLib
 from flask import Flask, render_template, request, send_from_directory, make_response, Response, jsonify
 from flask_cors import CORS, cross_origin
 from my_logger import MyLogger
-from os import path, remove, sys, listdir, fsdecode
+from os import path, remove, sys, listdir, fsdecode, makedirs
 from requests import post
 from shutil import move
 from tkinter import Tk, Entry, Label, Button, Frame
@@ -13,46 +13,37 @@ from zipfile import ZipFile
 
 
 # Initialize the Flask application
-server = Flask(__name__)
+server = Flask("digSign_server")
 ####################################################################
 #       CONFIGURATION                                              #
 ####################################################################
-# Path to the upload directory
-server.config["UPLOAD_FOLDER"] = path.join("uploads", "")
-# Path to the signed files directory
-server.config["SIGNED_FOLDER"] = path.join("signed", "")
-# Log directory
-server.config["LOGS_FOLDER"] = path.join("log", "")
-# Allowed extensions
-server.config["ALLOWED_EXTENSIONS"] = set(["txt", "pdf"])
+HOST = "localhost"
+PORT = 8090
+# mapped directories
+UPLOAD_FOLDER = path.join("uploads", "")
+SIGNED_FOLDER = path.join("signed", "")
+LOGS_FOLDER = path.join("log", "")
 # Allowed signature types
 p7m = "p7m"
 pdf = "pdf"
-server.config["ALLOWED_SIGNATURE_TYPES"] = set([p7m, pdf])
+ALLOWED_SIGNATURE_TYPES = set([p7m, pdf])
 # Memorized pin
 memorized_pin = {}
-three_hours = 3 * 60 * 60
-pin_expiration_seconds = 20
-# can not login error
-CAN_NOT_LOGIN = 9004
-# User messages
-invalid_json_request = "Richiesta al server non valida, contatta l'amministratore di sistema"
+THREE_HOURS = 3 * 60 * 60
+PIN_TIMEOUT = 20
 ####################################################################
 
 
 # enable CORS for /api/*
 CORS(server, resources={r"/api/*": {"origins": "*"}})
 
-
-def allowed_file(file_name):
-    ''' Returns if `file_name` is of an allowed extension '''
-    return "." in file_name and \
-        file_name.rsplit(".", 1)[1] in server.config["ALLOWED_EXTENSIONS"]
+# logger initialization
+logger = MyLogger.__call__().my_logger()
 
 
 def allowed_signature(signature_type):
     ''' Returns if `signature_type` is allowed '''
-    return signature_type in server.config["ALLOWED_SIGNATURE_TYPES"]
+    return signature_type in ALLOWED_SIGNATURE_TYPES
 
 
 def error_response_maker(error_message, user_tip, status):
@@ -82,6 +73,13 @@ def index():
 def upload():
     uploaded_files = request.files.getlist("files[]")
     output_type = request.form["type"]
+
+    #check for upload and signed folder
+    if not path.exists(UPLOAD_FOLDER) or not path.isdir(UPLOAD_FOLDER):
+        makedirs(UPLOAD_FOLDER)
+    if not path.exists(SIGNED_FOLDER) or not path.isdir(SIGNED_FOLDER):
+        makedirs(SIGNED_FOLDER)
+
     file_paths_to_sign = []
     # Foreach file uploaded
     for uploaded_file in uploaded_files:
@@ -89,15 +87,14 @@ def upload():
             # Make the filename safe, remove unsupported chars
             file_name = secure_filename(uploaded_file.filename)
             # Save file in /upload folder
-            uploaded_file_path = path.join(
-                server.config["UPLOAD_FOLDER"], file_name)
+            uploaded_file_path = path.join(UPLOAD_FOLDER, file_name)
             uploaded_file.save(uploaded_file_path)
             # Path added to files to sign
             file_paths_to_sign.append(uploaded_file_path)
 
     json_request = {
         "file_list": [],
-        "output_path": server.config["SIGNED_FOLDER"],
+        "output_path": SIGNED_FOLDER,
         "signed_file_type": output_type
     }
 
@@ -127,13 +124,12 @@ def upload():
 
 @server.route("/uploads/<filename>")
 def uploaded_file(filename):
-    return send_from_directory(
-        server.config["SIGNED_FOLDER"], filename)
+    return send_from_directory(SIGNED_FOLDER, filename)
 
 
 @server.route("/easylog")
 def zip_and_download_logs():
-    log_folder = server.config["LOGS_FOLDER"]
+    log_folder = LOGS_FOLDER
     today = datetime.now().strftime("%Y%B%d")
     log_zip_name = f"{today}_log.zip"
 
@@ -167,10 +163,11 @@ def sign(req={}):
     #     output_path: output_folder_path
     # }
     ###################################
-
     logger.info("/api/sign request")
 
     # check for well formed request JSON
+    invalid_json_request = "Richiesta al server non valida, contatta l'amministratore di sistema"
+    
     if not request.json:
         error_message = "Missing json request structure"
         return error_response_maker(error_message, invalid_json_request, 404)
@@ -204,7 +201,7 @@ def sign(req={}):
 
     # getting smart cards connected
     try:
-        sessions = App().get_smart_cards_sessions()
+        sessions = DigiSignLib().get_smart_cards_sessions()
     except Exception as err:
         _, _, tb = sys.exc_info()
         logger.error('\n\t'.join(f"{i}" for i in extract_tb(tb)))
@@ -216,7 +213,7 @@ def sign(req={}):
     # attempt to login
     try:
         get_pin()
-        session = App().session_login(sessions, memorized_pin["pin"])
+        session = DigiSignLib().session_login(sessions, memorized_pin["pin"])
     except Exception as err:
         _, _, tb = sys.exc_info()
         logger.error('\n\t'.join(f"{i}" for i in extract_tb(tb)))
@@ -237,7 +234,7 @@ def sign(req={}):
         try:
             if signature_type == p7m:
                 # p7m signature
-                temp_file_path = App().sign_p7m(file_path_to_sign, session)
+                temp_file_path = DigiSignLib().sign_p7m(file_path_to_sign, session)
             elif signature_type == pdf:
                 # pdf signature
                 # TODO
@@ -264,7 +261,7 @@ def sign(req={}):
             continue
 
     try:
-        App().session_logout(session)
+        DigiSignLib().session_logout(session)
     except:
         logger.warning("logout failed")
     ###################################
@@ -319,7 +316,7 @@ def get_pin():
 def _is_pin_valid():
     ''' Check if `PIN` is expired '''
 
-    return datetime.now() < memorized_pin["timestamp"] + timedelta(seconds=pin_expiration_seconds)
+    return datetime.now() < memorized_pin["timestamp"] + timedelta(seconds=PIN_TIMEOUT)
 
 
 def _get_pin_popup():
@@ -372,12 +369,18 @@ def _center(widget):
 ####################################################################
 #       SERVER STARTUP                                             #
 ####################################################################
-if __name__ == "__main__":
-    logger = MyLogger.__call__().my_logger()
+def server_start():
     logger.info("Server started!")
 
-    server.run(
-        host="127.0.0.1",
-        port=int("8090"),
-        debug=False
-    )
+    try:
+        server.run(
+            host=HOST,
+            port=PORT,
+            debug=False
+        )
+    except:
+        logger.error("Impossible to start Server")
+        pass
+
+if __name__ == "__main__":
+    server_start()

@@ -31,6 +31,8 @@ class MyLogger(object, metaclass=SingletonType):
             '%(asctime)s - [%(levelname)s | %(filename)s:%(lineno)s] > %(message)s')
         handler.setFormatter(formatter)
         self._logger.addHandler(handler)
+        
+        self._logger.info("  ---  Started logger  ---")
 
 
     def my_logger(self):

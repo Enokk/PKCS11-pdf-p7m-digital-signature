@@ -18,7 +18,7 @@ class P7mCreationError(Exception):
     pass
 
 
-class App():
+class DigiSignLib():
 
     @staticmethod
     def get_smart_cards_sessions():
@@ -57,7 +57,7 @@ class App():
         '''
 
         # fetching file content
-        file_content = App().get_file_content(file_path)
+        file_content = DigiSignLib().get_file_content(file_path)
         # hashing file content
         file_content_digest = SignatureUtils().digest(open_session, file_content)
 
@@ -111,7 +111,7 @@ class App():
 
         # saves p7m to file
         signed_file_path = f"{file_path}.p7m"
-        App().save_file_content(signed_file_path, output_content)
+        DigiSignLib().save_file_content(signed_file_path, output_content)
 
         return signed_file_path
 
