@@ -1,39 +1,40 @@
-import logging
+from logging import getLogger, INFO, Formatter
 from logging.handlers import RotatingFileHandler
-import os
+from my_config_loader import MyConfigLoader
+from os import path, mkdir
+from singleton_type import SingletonType
 
-_50KB = 51200
 
-class SingletonType(type):
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(
-                SingletonType, cls).__call__(*args, **kwargs)
-        return cls._instances[cls]
+####################################################################
+#       CONFIGURATION                                              #
+####################################################################
+LOGGER_NAME = "cicerone"
+LOGGING_FOLDER = MyConfigLoader().get_logger_config()["log_folder"]
+LOGGING_FILE = MyConfigLoader().get_logger_config()["log_file_name"]
+LOGGING_FILE_PATH = path.join(LOGGING_FOLDER, LOGGING_FILE)
+FILE_SIZE = MyConfigLoader().get_logger_config()["file_byte_size"]
+LOG_FILE_COUNT = MyConfigLoader().get_logger_config()["log_files_count"]
+####################################################################
 
 
 class MyLogger(object, metaclass=SingletonType):
     _logger = None
 
     def __init__(self):
-        dirname = "./log"
-        if not os.path.isdir(dirname):
-            os.mkdir(dirname)
+        if not path.isdir(LOGGING_FOLDER):
+            mkdir(LOGGING_FOLDER)
 
-        self._logger = logging.getLogger("cicerone")
-        self._logger.setLevel(logging.INFO)
+        self._logger = getLogger(LOGGER_NAME)
+        self._logger.setLevel(INFO)
 
         handler = RotatingFileHandler(
-            'log/digiSign.log', maxBytes=_50KB, backupCount=10)
-        formatter = logging.Formatter(
+            LOGGING_FILE_PATH, maxBytes=FILE_SIZE, backupCount=LOG_FILE_COUNT)
+        formatter = Formatter(
             '%(asctime)s - [%(levelname)s | %(filename)s:%(lineno)s] > %(message)s')
         handler.setFormatter(formatter)
         self._logger.addHandler(handler)
-        
-        self._logger.info("  ---  Started logger  ---")
 
+        self._logger.info("  ---  Started logger  ---")
 
     def my_logger(self):
         return self._logger

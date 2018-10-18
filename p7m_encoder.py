@@ -7,20 +7,18 @@ from my_logger import MyLogger
 #       CONFIGURATION                                              #
 ####################################################################
 # UTCTime tag
-UTCTime = 0x17
+UTC_TIME = 0x17
 # [0] tag
-zero_tag = 0x00
+ZERO_TAG = 0x00
 # List of SNMP values for asn1 tags
 PKCS7 = "1.2.840.113549.1.7.1"
-PKCS7_signed_data = "1.2.840.113549.1.7.2"
-PKCS9_content_type = "1.2.840.113549.1.9.3"
-PKCS9_message_digest = "1.2.840.113549.1.9.4"
+PKCS7_SIGNED_DATA = "1.2.840.113549.1.7.2"
+PKCS9_CONTENT_TYPE = "1.2.840.113549.1.9.3"
+PKCS9_MESSAGE_DIGEST = "1.2.840.113549.1.9.4"
 SHA256 = "2.16.840.1.101.3.4.2.1"
 RSA = "1.2.840.113549.1.1.1"
-signing_time = "1.2.840.113549.1.9.5"
-signing_certificate_v2 = "1.2.840.113549.1.9.16.2.47"
-# logger
-logger = MyLogger.__call__().my_logger()
+SIGNING_TIME = "1.2.840.113549.1.9.5"
+SIGNING_CERTIFICATE_V2 = "1.2.840.113549.1.9.16.2.47"
 ####################################################################
 
 
@@ -40,17 +38,17 @@ class P7mEncoder:
         p7m = Encoder()
         p7m.start()
 
-        logger.info("encoding p7m")
+        MyLogger().my_logger().info("encoding p7m")
         p7m.enter(Numbers.Sequence)  # 1
-        p7m.write(PKCS7_signed_data, Numbers.ObjectIdentifier)
-        p7m.enter(zero_tag, Classes.Context)  # 2
+        p7m.write(PKCS7_SIGNED_DATA, Numbers.ObjectIdentifier)
+        p7m.enter(ZERO_TAG, Classes.Context)  # 2
         p7m.enter(Numbers.Sequence)  # 3
         p7m._emit(P7mEncoder._version_number())
         p7m.enter(Numbers.Set)  # 4
         p7m._emit(P7mEncoder._digest_algorithm())
         p7m.leave()  # 4
         p7m._emit(P7mEncoder._content_info(content))
-        p7m.enter(zero_tag, Classes.Context)  # 4
+        p7m.enter(ZERO_TAG, Classes.Context)  # 4
         p7m._emit(certificate_value)
         p7m.leave()  # 4
         p7m._emit(signer_info)
@@ -75,7 +73,7 @@ class P7mEncoder:
         signer_info = Encoder()
         signer_info.start()
 
-        logger.info("encoding signer info")
+        MyLogger().my_logger().info("encoding signer info")
         signer_info.enter(Numbers.Set)  # 1
         signer_info.enter(Numbers.Sequence)  # 2
         signer_info._emit(P7mEncoder._version_number())
@@ -116,8 +114,8 @@ class P7mEncoder:
         signed_attributes = Encoder()
         signed_attributes.start()
 
-        logger.info("encoding signed attributes")
-        signed_attributes.enter(zero_tag, Classes.Context)
+        MyLogger().my_logger().info("encoding signed attributes")
+        signed_attributes.enter(ZERO_TAG, Classes.Context)
         signed_attributes._emit(P7mEncoder._get_signed_attributes(
             content_hash, certificate_hash))
         signed_attributes.leave()
@@ -136,7 +134,7 @@ class P7mEncoder:
         signed_attributes = Encoder()
         signed_attributes.start()
 
-        logger.info("building bytes to sign")
+        MyLogger().my_logger().info("building bytes to sign")
         signed_attributes.enter(Numbers.Set)
         signed_attributes._emit(P7mEncoder._get_signed_attributes(
             content_hash, certificate_hash))
@@ -159,28 +157,28 @@ class P7mEncoder:
         signed_attributes.start()
 
         signed_attributes.enter(Numbers.Sequence)  # 1
-        signed_attributes.write(PKCS9_content_type, Numbers.ObjectIdentifier)
+        signed_attributes.write(PKCS9_CONTENT_TYPE, Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2
         signed_attributes.write(PKCS7, Numbers.ObjectIdentifier)
         signed_attributes.leave()  # 2
         signed_attributes.leave()  # 1
 
         signed_attributes.enter(Numbers.Sequence)  # 1
-        signed_attributes.write(signing_time, Numbers.ObjectIdentifier)
+        signed_attributes.write(SIGNING_TIME, Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2
-        signed_attributes.write(P7mEncoder._get_timestamp(), UTCTime)
+        signed_attributes.write(P7mEncoder._get_timestamp(), UTC_TIME)
         signed_attributes.leave()  # 2
         signed_attributes.leave()  # 1
 
         signed_attributes.enter(Numbers.Sequence)  # 1
-        signed_attributes.write(PKCS9_message_digest, Numbers.ObjectIdentifier)
+        signed_attributes.write(PKCS9_MESSAGE_DIGEST, Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2
         signed_attributes.write(content_hash, Numbers.OctetString)
         signed_attributes.leave()  # 2
         signed_attributes.leave()  # 1
 
         signed_attributes.enter(Numbers.Sequence)  # 1
-        signed_attributes.write(signing_certificate_v2,
+        signed_attributes.write(SIGNING_CERTIFICATE_V2,
                                 Numbers.ObjectIdentifier)
         signed_attributes.enter(Numbers.Set)  # 2
         signed_attributes.enter(Numbers.Sequence)  # 3
@@ -231,7 +229,7 @@ class P7mEncoder:
 
         data_content.enter(Numbers.Sequence)  # 1
         data_content.write(PKCS7, Numbers.ObjectIdentifier)
-        data_content.enter(zero_tag, Classes.Context)  # 2
+        data_content.enter(ZERO_TAG, Classes.Context)  # 2
         data_content.write(content, Numbers.OctetString)
         data_content.leave()  # 2
         data_content.leave()  # 1

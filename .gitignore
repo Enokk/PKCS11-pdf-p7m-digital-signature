@@ -6,8 +6,3 @@ uploads/*
 digiSign.log
 hash*
 playground.py
-
-# exception to the rules
-!log/.gitkeep
-!signed/.gitkeep
-!uploads/.gitkeep 

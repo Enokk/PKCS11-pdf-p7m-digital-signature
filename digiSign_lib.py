@@ -4,14 +4,6 @@ from p7m_encoder import P7mEncoder
 from signature_util import SignatureUtils
 
 
-####################################################################
-#       CONFIGURATION                                              #
-####################################################################
-# logger
-logger = MyLogger.__call__().my_logger()
-####################################################################
-
-
 # Custom exceptions:
 class P7mCreationError(Exception):
     ''' Raised when failing to create p7m '''
@@ -126,7 +118,7 @@ class DigiSignLib():
     def get_file_content(file_path):
         ''' Return `file_path` content in binary form '''
 
-        logger.info(f"reading file {file_path}")
+        MyLogger().my_logger().info(f"reading file {file_path}")
         with open(file_path, "rb") as file:
             file_content = file.read()
 
@@ -136,6 +128,6 @@ class DigiSignLib():
     def save_file_content(file_path, content):
         ''' Save content to `file_path` '''
 
-        logger.info(f"saving output to {file_path}")
+        MyLogger().my_logger().info(f"saving output to {file_path}")
         with open(file_path, "wb") as file:
             file.write(content)

@@ -1,3 +1,4 @@
+from my_config_loader import MyConfigLoader
 from my_logger import MyLogger
 from os import listdir, devnull, fsdecode
 from PyKCS11 import PyKCS11Lib, Mechanism, LowLevel
@@ -7,9 +8,7 @@ from PyKCS11 import PyKCS11Lib, Mechanism, LowLevel
 #       CONFIGURATION                                              #
 ####################################################################
 # driver directory
-driver_dir = "drivers"
-# logger
-logger = MyLogger.__call__().my_logger()
+DRIVER_FOLDER = MyConfigLoader().get_server_config()["driver_folder"]
 ####################################################################
 
 
@@ -25,7 +24,7 @@ class SignatureUtils:
     def fetch_smart_card_sessions():
         ''' Return a `session` list for the connected smart cards '''
 
-        logger.info("loading drivers")
+        MyLogger().my_logger().info("loading drivers")
         pkcs11 = PyKCS11Lib()
         driver_loaded = False
 
@@ -34,16 +33,16 @@ class SignatureUtils:
             pkcs11.load()
             driver_loaded = True
         except:
-            logger.warning("no default driver")
+            MyLogger().my_logger().warning("no default driver")
 
         # anyway load known drivers
-        for file in listdir(driver_dir):
+        for file in listdir(DRIVER_FOLDER):
             try:
                 pkcs11.load(file)
-                logger.info(f"driver {fsdecode(file)} loaded")
+                MyLogger().my_logger().info(f"driver {fsdecode(file)} loaded")
                 driver_loaded = True
             except:
-                logger.warning(f"driver {fsdecode(file)} NOT loaded")
+                MyLogger().my_logger().warning(f"driver {fsdecode(file)} NOT loaded")
                 continue
 
         # cannot load any driver file
@@ -70,7 +69,7 @@ class SignatureUtils:
     def _fetch_slots(pkcs11_lib):
         ''' Return a `slot list` (connected Smart Cards) '''
 
-        logger.info("getting slots")
+        MyLogger().my_logger().info("getting slots")
         try:
             slots = pkcs11_lib.getSlotList(tokenPresent=True)
             if(len(slots) < 1):
@@ -93,7 +92,7 @@ class SignatureUtils:
                 the logged in session
         '''
 
-        logger.info("user login")
+        MyLogger().my_logger().info("user login")
         for session in sessions:
             try:
                 session.login(pin)
@@ -112,7 +111,7 @@ class SignatureUtils:
                 session: smart card session
         '''
 
-        logger.info("user logout")
+        MyLogger().my_logger().info("user logout")
         session.logout()
 
     @staticmethod
@@ -124,7 +123,7 @@ class SignatureUtils:
                 session: smart card session
         '''
 
-        logger.info("fetching certificate")
+        MyLogger().my_logger().info("fetching certificate")
         try:
             certificates = session.findObjects(
                 [(LowLevel.CKA_CLASS, LowLevel.CKO_CERTIFICATE)])
@@ -145,7 +144,7 @@ class SignatureUtils:
                 certificate: smart card certificate
         '''
 
-        logger.info("fetching certificate value")
+        MyLogger().my_logger().info("fetching certificate value")
         try:
             certificate_value = session.getAttributeValue(
                 certificate, [LowLevel.CKA_VALUE])[0]
@@ -164,7 +163,7 @@ class SignatureUtils:
                 certificate: smart card certificate
         '''
 
-        logger.info("fetching certificate issuer")
+        MyLogger().my_logger().info("fetching certificate issuer")
         try:
             certificate_issuer = session.getAttributeValue(
                 certificate, [LowLevel.CKA_ISSUER])[0]
@@ -183,7 +182,7 @@ class SignatureUtils:
                 certificate: smart card certificate
         '''
 
-        logger.info("fetching certificate serial number")
+        MyLogger().my_logger().info("fetching certificate serial number")
         try:
             serial_number = session.getAttributeValue(
                 certificate, [LowLevel.CKA_SERIAL_NUMBER])[0]
@@ -207,7 +206,7 @@ class SignatureUtils:
                 certificate: certificate connected to the key
         '''
 
-        logger.info("fetching private key")
+        MyLogger().my_logger().info("fetching private key")
         try:
             # getting the certificate id
             identifier = session.getAttributeValue(
@@ -232,7 +231,7 @@ class SignatureUtils:
                 certificate: certificate connected to the key
         '''
 
-        logger.info("fetching public key")
+        MyLogger().my_logger().info("fetching public key")
         try:
             # getting the certificate id
             identifier = session.getAttributeValue(
@@ -255,7 +254,7 @@ class SignatureUtils:
                 content: content to hash
         '''
 
-        logger.info("hashing content")
+        MyLogger().my_logger().info("hashing content")
         try:
             digest = session.digest(content, Mechanism(LowLevel.CKM_SHA256))
         except:
@@ -277,7 +276,7 @@ class SignatureUtils:
                 content: bytes to hash and sign
         '''
 
-        logger.info("signing content")
+        MyLogger().my_logger().info("signing content")
         try:
             signature = session.sign(privKey, content, Mechanism(
                 LowLevel.CKM_SHA256_RSA_PKCS, None))

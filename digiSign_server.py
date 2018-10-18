@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from digiSign_lib import DigiSignLib
 from flask import Flask, render_template, request, send_from_directory, make_response, Response, jsonify
 from flask_cors import CORS, cross_origin
+from my_config_loader import MyConfigLoader
 from my_logger import MyLogger
 from os import path, remove, sys, listdir, fsdecode, makedirs
 from requests import post
@@ -12,33 +13,31 @@ from werkzeug.utils import secure_filename
 from zipfile import ZipFile
 
 
-# Initialize the Flask application
-server = Flask("digSign_server")
 ####################################################################
 #       CONFIGURATION                                              #
 ####################################################################
-HOST = "localhost"
-PORT = 8090
+# url
+HOST = MyConfigLoader().get_server_config()["host"]
+PORT = MyConfigLoader().get_server_config()["port"]
 # mapped directories
-UPLOAD_FOLDER = path.join("uploads", "")
-SIGNED_FOLDER = path.join("signed", "")
-LOGS_FOLDER = path.join("log", "")
+TEMPLATE_FOLDER = MyConfigLoader().get_server_config()["template_folder"]
+UPLOAD_FOLDER = MyConfigLoader().get_server_config()["uploaded_file_folder"]
+SIGNED_FOLDER = MyConfigLoader().get_server_config()["signed_file_folder"]
+LOGS_FOLDER = MyConfigLoader().get_logger_config()["log_folder"]
 # Allowed signature types
-p7m = "p7m"
-pdf = "pdf"
-ALLOWED_SIGNATURE_TYPES = set([p7m, pdf])
+P7M = "p7m"
+PDF = "pdf"
+ALLOWED_SIGNATURE_TYPES = set([P7M, PDF])
 # Memorized pin
 memorized_pin = {}
-THREE_HOURS = 3 * 60 * 60
-PIN_TIMEOUT = 20
+PIN_TIMEOUT = MyConfigLoader().get_server_config()["pin_validity_time"]
 ####################################################################
 
 
+# Initialize the Flask application
+server = Flask(__name__, template_folder=TEMPLATE_FOLDER)
 # enable CORS for /api/*
 CORS(server, resources={r"/api/*": {"origins": "*"}})
-
-# logger initialization
-logger = MyLogger.__call__().my_logger()
 
 
 def allowed_signature(signature_type):
@@ -57,7 +56,7 @@ def error_response_maker(error_message, user_tip, status):
             }
     '''
 
-    logger.error(error_message)
+    MyLogger().my_logger().error(error_message)
     return make_response(jsonify({"error_message": error_message, "user_tip": user_tip}), status)
 
 
@@ -74,11 +73,17 @@ def upload():
     uploaded_files = request.files.getlist("files[]")
     output_type = request.form["type"]
 
-    #check for upload and signed folder
+    # Check for upload and signed folder
     if not path.exists(UPLOAD_FOLDER) or not path.isdir(UPLOAD_FOLDER):
         makedirs(UPLOAD_FOLDER)
     if not path.exists(SIGNED_FOLDER) or not path.isdir(SIGNED_FOLDER):
         makedirs(SIGNED_FOLDER)
+
+    # Folders cleanup
+    for _file in listdir(UPLOAD_FOLDER):
+        remove(path.join(UPLOAD_FOLDER, _file))
+    for _file in listdir(SIGNED_FOLDER):
+        remove(path.join(SIGNED_FOLDER, _file))
 
     file_paths_to_sign = []
     # Foreach file uploaded
@@ -101,14 +106,14 @@ def upload():
     for _file in file_paths_to_sign:
         json_request["file_list"].append(_file)
 
-    res = post(url="http://127.0.0.1:8090/api/sign", json=json_request,
+    url = f"http://{HOST}:{PORT}/api/sign"
+    res = post(url=url, json=json_request,
                headers={'Content-Type': 'application/json'})
 
     if res.status_code != 200:
         user_tip = res.json()["user_tip"]
         return render_template("error_page.html", usertip=user_tip)
-    
-    
+
     signed_files_list = []
     not_signed_files_list = []
     for item in res.json()["signed_file_list"]:
@@ -119,7 +124,7 @@ def upload():
             not_signed_files_list.append(item["file_to_sign"])
 
     return render_template("upload.html", filenames=signed_files_list,
-        errornames=not_signed_files_list)
+                           errornames=not_signed_files_list)
 
 
 @server.route("/uploads/<filename>")
@@ -129,24 +134,23 @@ def uploaded_file(filename):
 
 @server.route("/easylog")
 def zip_and_download_logs():
-    log_folder = LOGS_FOLDER
     today = datetime.now().strftime("%Y%B%d")
     log_zip_name = f"{today}_log.zip"
 
     # old zip cleanup
-    for _file in listdir(log_folder):
+    for _file in listdir(LOGS_FOLDER):
         if fsdecode(_file).find(".zip") > 0:
-            remove(f"{log_folder}{_file}")
+            remove(path.join(LOGS_FOLDER, _file))
 
     # generate zip file
-    with ZipFile(f"{log_folder}{log_zip_name}", "w") as zip:
-        for _file in listdir(log_folder):
+    with ZipFile(path.join(LOGS_FOLDER, log_zip_name), "w") as zip:
+        for _file in listdir(LOGS_FOLDER):
             # keep only .log files
             if fsdecode(_file).find(".log") > 0:
-                zip.write(f"{log_folder}{_file}")
+                zip.write(path.join(LOGS_FOLDER, _file))
 
     # zip download
-    return send_from_directory(log_folder, log_zip_name)
+    return send_from_directory(LOGS_FOLDER, log_zip_name)
 
 
 ####################################################################
@@ -163,11 +167,11 @@ def sign(req={}):
     #     output_path: output_folder_path
     # }
     ###################################
-    logger.info("/api/sign request")
+    MyLogger().my_logger().info("/api/sign request")
 
     # check for well formed request JSON
     invalid_json_request = "Richiesta al server non valida, contatta l'amministratore di sistema"
-    
+
     if not request.json:
         error_message = "Missing json request structure"
         return error_response_maker(error_message, invalid_json_request, 404)
@@ -204,7 +208,8 @@ def sign(req={}):
         sessions = DigiSignLib().get_smart_cards_sessions()
     except Exception as err:
         _, _, tb = sys.exc_info()
-        logger.error('\n\t'.join(f"{i}" for i in extract_tb(tb)))
+        MyLogger().my_logger().error(
+            '\n\t'.join(f"{i}" for i in extract_tb(tb)))
         clear_pin()
         return error_response_maker(str(err),
                                     "Controllare che la smart card sia inserita correttamente",
@@ -216,7 +221,8 @@ def sign(req={}):
         session = DigiSignLib().session_login(sessions, memorized_pin["pin"])
     except Exception as err:
         _, _, tb = sys.exc_info()
-        logger.error('\n\t'.join(f"{i}" for i in extract_tb(tb)))
+        MyLogger().my_logger().error(
+            '\n\t'.join(f"{i}" for i in extract_tb(tb)))
         clear_pin()
         return error_response_maker(str(err),
                                     "Controllare che il pin sia valido e corretto",
@@ -232,10 +238,10 @@ def sign(req={}):
         signed_files_list.append(output_item)
 
         try:
-            if signature_type == p7m:
+            if signature_type == P7M:
                 # p7m signature
                 temp_file_path = DigiSignLib().sign_p7m(file_path_to_sign, session)
-            elif signature_type == pdf:
+            elif signature_type == PDF:
                 # pdf signature
                 # TODO
                 pass
@@ -243,7 +249,8 @@ def sign(req={}):
             signed_files_list[index]["signed"] = "yes"
         except:
             _, _, tb = sys.exc_info()
-            logger.error('\n\t'.join(f"{i}" for i in extract_tb(tb)))
+            MyLogger().my_logger().error(
+                '\n\t'.join(f"{i}" for i in extract_tb(tb)))
             signed_files_list[index]["signed"] = "no"
             continue
 
@@ -256,14 +263,15 @@ def sign(req={}):
             signed_files_list[index]["signed_file"] = signed_file_path
         except:
             _, _, tb = sys.exc_info()
-            logger.error('\n\t'.join(f"{i}" for i in extract_tb(tb)))
+            MyLogger().my_logger().error(
+                '\n\t'.join(f"{i}" for i in extract_tb(tb)))
             signed_files_list[index]["signed_file"] = "LOST"
             continue
 
     try:
         DigiSignLib().session_logout(session)
     except:
-        logger.warning("logout failed")
+        MyLogger().my_logger().warning("logout failed")
     ###################################
     # response JSON structure:
     # { signed_file_list: [
@@ -288,7 +296,7 @@ def sign(req={}):
 #       UTILITIES                                                  #
 ####################################################################
 def clear_pin():
-    logger.info("Clearing PIN")
+    MyLogger().my_logger().info("Clearing PIN")
     if "timestamp" in memorized_pin:
         memorized_pin.pop("timestamp")
     if "pin" in memorized_pin:
@@ -301,11 +309,11 @@ def get_pin():
     if "pin" not in memorized_pin:
         _get_pin_popup()
     elif not _is_pin_valid():
-        logger.info("Invalidating PIN")
+        MyLogger().my_logger().info("Invalidating PIN")
         clear_pin()
         _get_pin_popup()
     else:
-        logger.info("Refreshing PIN")
+        MyLogger().my_logger().info("Refreshing PIN")
         memorized_pin["timestamp"] = datetime.now()
 
     # check for mishapening
@@ -322,7 +330,7 @@ def _is_pin_valid():
 def _get_pin_popup():
     ''' Little popup to input Smart Card PIN '''
 
-    logger.info("USer PIN input")
+    MyLogger().my_logger().info("USer PIN input")
     widget = Tk()
     row = Frame(widget)
     label = Label(row, width=10, text="Insert PIN")
@@ -370,7 +378,7 @@ def _center(widget):
 #       SERVER STARTUP                                             #
 ####################################################################
 def server_start():
-    logger.info("Server started!")
+    MyLogger().my_logger().info("Server started!")
 
     try:
         server.run(
@@ -379,8 +387,9 @@ def server_start():
             debug=False
         )
     except:
-        logger.error("Impossible to start Server")
+        MyLogger().my_logger().error("Impossible to start Server")
         pass
+
 
 if __name__ == "__main__":
     server_start()
