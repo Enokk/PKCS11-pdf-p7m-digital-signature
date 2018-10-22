@@ -147,7 +147,7 @@ def zip_and_download_logs():
         for _file in listdir(LOGS_FOLDER):
             # keep only .log files
             if fsdecode(_file).find(".log") > 0:
-                zip.write(path.join(LOGS_FOLDER, _file))
+                zip.write(path.join(LOGS_FOLDER, _file), arcname=_file)
 
     # zip download
     return send_from_directory(LOGS_FOLDER, log_zip_name)
