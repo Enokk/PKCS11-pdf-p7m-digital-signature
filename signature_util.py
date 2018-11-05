@@ -4,6 +4,7 @@ from os import listdir, devnull, fsdecode
 from PyKCS11 import PyKCS11Lib, Mechanism, LowLevel
 
 
+
 ####################################################################
 #       CONFIGURATION                                              #
 ####################################################################

@@ -9,6 +9,7 @@ from requests import post
 from shutil import move
 from tkinter import Tk, Entry, Label, Button, Frame
 from traceback import extract_tb
+from urllib import request as urlfile
 from werkzeug.utils import secure_filename
 from zipfile import ZipFile
 
@@ -42,7 +43,7 @@ CORS(server, resources={r"/api/*": {"origins": "*"}})
 
 def allowed_signature(signature_type):
     ''' Returns if `signature_type` is allowed '''
-    return signature_type in ALLOWED_SIGNATURE_TYPES
+    return signature_type.lower() in ALLOWED_SIGNATURE_TYPES
 
 
 def error_response_maker(error_message, user_tip, status):
@@ -158,7 +159,7 @@ def zip_and_download_logs():
 ####################################################################
 @server.route("/api/sign", methods=["POST"])
 @cross_origin()
-def sign(req={}):
+def sign():
     ###################################
     # request JSON structure:
     # {
@@ -197,17 +198,22 @@ def sign(req={}):
     if not "output_path" in request.json:
         error_message = "missing output_path field"
         return error_response_maker(error_message, invalid_json_request, 404)
-    path_for_signed_files_list = request.json["output_path"]
+    path_for_signed_files = request.json["output_path"]
 
-    if not path.exists(path_for_signed_files_list) or not path.isdir(path_for_signed_files_list):
-        error_message = f"{path_for_signed_files_list} field is not a valid directory"
-        return error_response_maker(error_message, invalid_json_request, 404)
+    output_to_url = False
+    if path_for_signed_files.startswith("http://"):
+        output_to_url = True
+    else:
+        if not path.exists(path_for_signed_files) or not path.isdir(path_for_signed_files):
+            error_message = f"{path_for_signed_files} field is not a valid directory"
+            return error_response_maker(error_message, invalid_json_request, 404)
 
     # getting smart cards connected
     try:
         sessions = DigiSignLib().get_smart_cards_sessions()
     except Exception as err:
-        _, _, tb = sys.exc_info()
+        _, value, tb = sys.exc_info()
+        MyLogger().my_logger().error(value)
         MyLogger().my_logger().error(
             '\n\t'.join(f"{i}" for i in extract_tb(tb)))
         clear_pin()
@@ -220,7 +226,8 @@ def sign(req={}):
         get_pin()
         session = DigiSignLib().session_login(sessions, memorized_pin["pin"])
     except Exception as err:
-        _, _, tb = sys.exc_info()
+        _, value, tb = sys.exc_info()
+        MyLogger().my_logger().error(value)
         MyLogger().my_logger().error(
             '\n\t'.join(f"{i}" for i in extract_tb(tb)))
         clear_pin()
@@ -237,10 +244,25 @@ def sign(req={}):
                        "signed_file": ""}
         signed_files_list.append(output_item)
 
+        # handle url file paths
+        if file_path_to_sign.startswith("http://"):
+            try:
+                local_file_path = downoad_file(file_path_to_sign)
+            except:
+                MyLogger().my_logger().error(f"Impossibile reperire il file: {file_path_to_sign}")
+                _, value, tb = sys.exc_info()
+                MyLogger().my_logger().error(value)
+                MyLogger().my_logger().error(
+                    '\n\t'.join(f"{i}" for i in extract_tb(tb)))
+                signed_files_list[index]["signed"] = "no"
+                continue
+        else:
+            local_file_path = file_path_to_sign
+
         try:
             if signature_type == P7M:
                 # p7m signature
-                temp_file_path = DigiSignLib().sign_p7m(file_path_to_sign, session)
+                temp_file_path = DigiSignLib().sign_p7m(local_file_path, session)
             elif signature_type == PDF:
                 # pdf signature
                 # TODO
@@ -248,25 +270,51 @@ def sign(req={}):
 
             signed_files_list[index]["signed"] = "yes"
         except:
-            _, _, tb = sys.exc_info()
+            _, value, tb = sys.exc_info()
+            MyLogger().my_logger().error(value)
             MyLogger().my_logger().error(
                 '\n\t'.join(f"{i}" for i in extract_tb(tb)))
             signed_files_list[index]["signed"] = "no"
             continue
 
         # moving signed file to given destination
-        temp_file_name = path.basename(temp_file_path)
-        signed_file_path = path.join(
-            path_for_signed_files_list, temp_file_name)
-        try:
-            move(temp_file_path, signed_file_path)
-            signed_files_list[index]["signed_file"] = signed_file_path
-        except:
-            _, _, tb = sys.exc_info()
-            MyLogger().my_logger().error(
-                '\n\t'.join(f"{i}" for i in extract_tb(tb)))
-            signed_files_list[index]["signed_file"] = "LOST"
-            continue
+        if output_to_url:
+            with open(temp_file_path, "rb") as _file:
+                files = {'file': _file}
+                try:
+                    MyLogger().my_logger().info(path_for_signed_files)
+                    res = post(path_for_signed_files, files=files)
+                except:
+                    _, value, tb = sys.exc_info()
+                    MyLogger().my_logger().error(value)
+                    MyLogger().my_logger().error(
+                        '\n\t'.join(f"{i}" for i in extract_tb(tb)))
+                    signed_files_list[index]["signed_file"] = "EXCEPTION!!"
+                    continue 
+                if res.status_code != 200:
+                    error_message = res.json()["error_message"]
+                    MyLogger().my_logger().error(error_message)
+                    signed_files_list[index]["signed_file"] = "ERROR!!"
+                    continue
+                else:
+                    signed_files_list[index]["signed"] = "yes - [remote]"
+                    uploaded_path = res.json()["Ok"]
+                    signed_files_list[index]["signed_file"] = f"{uploaded_path}"
+                    continue
+        else:
+            temp_file_name = path.basename(temp_file_path)
+            signed_file_path = path.join(
+                path_for_signed_files, temp_file_name)
+            try:
+                move(temp_file_path, signed_file_path)
+                signed_files_list[index]["signed_file"] = signed_file_path
+            except:
+                _, value, tb = sys.exc_info()
+                MyLogger().my_logger().error(value)
+                MyLogger().my_logger().error(
+                    '\n\t'.join(f"{i}" for i in extract_tb(tb)))
+                signed_files_list[index]["signed_file"] = "LOST"
+                continue
 
     try:
         DigiSignLib().session_logout(session)
@@ -308,6 +356,7 @@ def get_pin():
 
     if "pin" not in memorized_pin:
         _get_pin_popup()
+        MyLogger().my_logger().info("QUI NON CI ARRIVA")
     elif not _is_pin_valid():
         MyLogger().my_logger().info("Invalidating PIN")
         clear_pin()
@@ -330,8 +379,9 @@ def _is_pin_valid():
 def _get_pin_popup():
     ''' Little popup to input Smart Card PIN '''
 
-    MyLogger().my_logger().info("USer PIN input")
+    MyLogger().my_logger().info("User PIN input")
     widget = Tk()
+    widget.geometry("290x110")
     row = Frame(widget)
     label = Label(row, width=10, text="Insert PIN")
     pinbox = Entry(row, width=15, show='*')
@@ -359,19 +409,36 @@ def _get_pin_popup():
     widget.attributes("-topmost", True)
     widget.update()
     _center(widget)
+    MyLogger().my_logger().info("QUI SI INCHIODA")
     widget.mainloop()
+    
 
 
 def _center(widget):
     ''' Center `widget` on the screen '''
     screen_width = widget.winfo_screenwidth()
     screen_height = widget.winfo_screenheight()
-
+    
     x = screen_width / 2 - widget.winfo_width() / 2
     # Little higher than center
     y = screen_height / 2 - widget.winfo_height()
 
     widget.geometry(f"+{int(x)}+{int(y)}")
+
+
+def downoad_file(file_url):
+    # get file name
+    file_name = file_url.rsplit('/', 1)[1]
+    # get file content
+    url_content = urlfile.urlopen(file_url).read()
+    # create file locally
+    if not path.exists(UPLOAD_FOLDER) or not path.isdir(UPLOAD_FOLDER):
+        makedirs(UPLOAD_FOLDER)
+    file_path = path.join(UPLOAD_FOLDER, file_name)
+    with open(file_path, "wb") as _file:
+        _file.write(url_content)
+
+    return file_path
 
 
 ####################################################################

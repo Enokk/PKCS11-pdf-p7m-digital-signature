@@ -5,9 +5,9 @@ from singleton_type import SingletonType
 ####################################################################
 #       CONFIGURATION                                              #
 ####################################################################
-APPDATA = environ["APPDATA"]
-BASE_PATH = path.join(APPDATA, "DigiSign")
-JSON_CONFIG_FILE = path.join(BASE_PATH, "config.json")
+PROGRAMFILES = environ["PROGRAMFILES(X86)"]
+BASE_PATH = path.join(PROGRAMFILES, "DigiSign")
+JSON_CONFIG_FILE = path.join(BASE_PATH, "digiSign_config.json")
 ####################################################################
 
 class MyConfigLoader(object, metaclass=SingletonType):

@@ -33,14 +33,14 @@ class DigiSignLib():
             Returns:
                 logged in session
         '''
-        
+
         # login on the session
         return SignatureUtils().user_login(sessions, pin)
 
     @staticmethod
     def sign_p7m(file_path, open_session):
         ''' Return a signed p7m file path
-                The file name will be the same with .p7m at the end
+                The file name will be the same with (firmato) before the extension and .p7m at the end
                 The path will be the same
 
             Param:
@@ -102,7 +102,14 @@ class DigiSignLib():
             raise P7mCreationError("Exception on encoding p7m file content")
 
         # saves p7m to file
-        signed_file_path = f"{file_path}.p7m"
+        #   extracting needed part of file path
+        signed_file_base_path = path.dirname(file_path)
+        signed_file_complete_name = path.basename(file_path)
+        signed_file_name = path.splitext(signed_file_complete_name)[0]
+        signed_file_extension = path.splitext(signed_file_complete_name)[1]
+        #   composing final file name
+        final_file_name = f"{signed_file_name}(firmato){signed_file_extension}.p7m"
+        signed_file_path = path.join(signed_file_base_path, final_file_name)
         DigiSignLib().save_file_content(signed_file_path, output_content)
 
         return signed_file_path
