@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from digiSign_lib import DigiSignLib
+from digiSign_lib import DigiSignLib, CertificateOwnerException
 from flask import Flask, render_template, request, send_from_directory, make_response, Response, jsonify
 from flask_cors import CORS, cross_origin
 from my_config_loader import MyConfigLoader
@@ -164,7 +164,7 @@ def sign():
     ###################################
     # request JSON structure:
     # {
-    #     user_id: user_identifier
+    #     user_id: codice_fiscale // "X"*15 to skip check
     #     file_list: [file_path1, file_path2, ...],
     #     signed_file_type: p7m|pdf,
     #     output_path: output_folder_path
@@ -276,6 +276,9 @@ def sign():
                 pass
 
             signed_files_list[index]["signed"] = "yes"
+        except CertificateOwnerException as err:
+            user_tip = "Il codice del certificato e' diverso da quello dell'utente. Impossibile procedere."
+            return error_response_maker(str(err), user_tip, 500)
         except:
             _, value, tb = sys.exc_info()
             MyLogger().my_logger().error(value)

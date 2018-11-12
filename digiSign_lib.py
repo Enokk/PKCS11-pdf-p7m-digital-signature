@@ -15,6 +15,9 @@ class P7mCreationError(Exception):
 class CertificateValidityError(Exception):
     ''' Raised for validity problems on the certificate '''
     pass
+class CertificateOwnerException(Exception):
+    ''' Raised if user_cf is not equal to smart card cf '''
+    pass
 
 
 class DigiSignLib():
@@ -47,7 +50,7 @@ class DigiSignLib():
         return SignatureUtils().user_login(sessions, pin)
 
     @staticmethod
-    def sign_p7m(file_path, open_session, user_id):
+    def sign_p7m(file_path, open_session, user_cf):
         ''' Return a signed p7m file path
                 The file name will be the same with (firmato) before the extension and .p7m at the end
                 The path will be the same
@@ -64,7 +67,7 @@ class DigiSignLib():
 
         # fetching smart card certificate
         certificate = SignatureUtils().fetch_certificate(open_session)
-       # getting certificate value
+        # getting certificate value
         certificate_value = SignatureUtils().get_certificate_value(
             open_session, certificate)
         # hashing certificate value
@@ -72,10 +75,10 @@ class DigiSignLib():
             open_session, certificate_value)
 
         # check for signer identity
-        # if user_id == "X" * 15, avoid this check
-        if user_id != "X" * 15:
+        # if user_cf == "X" * 15, avoid this check
+        if user_cf != "X" * 15:
             # only for REST calls
-            DigiSignLib()._check_certificate_owner(certificate_value, user_id)
+            DigiSignLib()._check_certificate_owner(certificate_value, user_cf)
             
         # check for certificate time validity
         DigiSignLib()._check_certificate_validity(certificate_value)
@@ -203,22 +206,24 @@ class DigiSignLib():
         MyLogger().my_logger().info("User chosen to proceed")
 
     @staticmethod
-    def _check_certificate_owner(certificate_value, user_id):
+    def _check_certificate_owner(certificate_value, user_cf):
+        ''' Check if user_cf is equal to smart card cf. Raise a `CertificateOwnerException` '''
+
         MyLogger().my_logger().info("Chech for certificate owner")
         certificate_x509 = crypto.load_certificate(crypto.FILETYPE_ASN1, bytes(certificate_value))
-        # Codice fiscale is in the last 16 chars
+        
         subject = certificate_x509.get_subject()
-        # components is a list of 2-tuples
-        components = subject.get_components()
-        MyLogger().my_logger().info(dict(components))
-        # try:
-        #     serial_number = dict(components)[bytes("serialNumber")]
-        #     MyLogger().my_logger().info(serial_number.decode("utf-8"))
-        # except:
-        #     e, _, tb = sys.exc_info()
-        #     MyLogger().my_logger().error(e)
-        #     MyLogger().my_logger().error(
-        #         '\n\t'.join(f"{i}" for i in extract_tb(tb)))
+        components = dict(subject.get_components())
+        component = components[bytes("serialNumber".encode())]
+        codice_fiscale = component.decode()[-16:]
+
+        if codice_fiscale != user_cf:
+            raise CertificateOwnerException(f"{user_cf} (input) != {codice_fiscale} (smartcard)")
+        else:
+            MyLogger().my_logger().info("owner verified")
+
+
+        
 
     @staticmethod
     def _not_valid_yet_popup():
