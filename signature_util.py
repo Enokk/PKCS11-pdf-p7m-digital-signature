@@ -1,8 +1,8 @@
 from my_config_loader import MyConfigLoader
 from my_logger import MyLogger
-from os import listdir, devnull, fsdecode
+from os import listdir, devnull, fsdecode, sys
 from PyKCS11 import PyKCS11Lib, Mechanism, LowLevel
-
+from traceback import extract_tb
 
 
 ####################################################################
@@ -43,7 +43,8 @@ class SignatureUtils:
                 MyLogger().my_logger().info(f"driver {fsdecode(file)} loaded")
                 driver_loaded = True
             except:
-                MyLogger().my_logger().warning(f"driver {fsdecode(file)} NOT loaded")
+                MyLogger().my_logger().warning(
+                    f"driver {fsdecode(file)} NOT loaded")
                 continue
 
         # cannot load any driver file
@@ -56,7 +57,8 @@ class SignatureUtils:
         sessions = []
         for slot in slots:
             try:
-                session = pkcs11.openSession(slot)
+                session = pkcs11.openSession(
+                    slot, LowLevel.CKS_RW_PUBLIC_SESSION)
                 sessions.append(session)
             except:
                 continue
@@ -81,6 +83,13 @@ class SignatureUtils:
             raise SmartCardConnectionError("No smart card slot found")
 
     @staticmethod
+    def close_session(session):
+        ''' Close smart card `session` '''
+
+        MyLogger().my_logger().info("Close smart card session")
+        session.closeSession()
+
+    @staticmethod
     def user_login(sessions, pin):
         ''' 
             User login on a `session` using `pin`
@@ -101,7 +110,8 @@ class SignatureUtils:
             except:
                 continue
 
-        raise SmartCardConnectionError("Can not login on any sessions provided")
+        raise SmartCardConnectionError(
+            "Can not login on any sessions provided")
 
     @staticmethod
     def user_logout(session):
@@ -188,13 +198,15 @@ class SignatureUtils:
             serial_number = session.getAttributeValue(
                 certificate, [LowLevel.CKA_SERIAL_NUMBER])[0]
         except:
-            raise SmartCardConnectionError("Certificate has no valid serial number")
+            raise SmartCardConnectionError(
+                "Certificate has no valid serial number")
 
         try:
             int_serial_number = int.from_bytes(
                 serial_number, byteorder='big', signed=True)
         except:
-            raise SmartCardConnectionError("Can not cast certificate serial number to integer")
+            raise SmartCardConnectionError(
+                "Can not cast certificate serial number to integer")
         return int_serial_number
 
     @staticmethod
@@ -217,7 +229,8 @@ class SignatureUtils:
                 (LowLevel.CKA_CLASS, LowLevel.CKO_PRIVATE_KEY),
                 (LowLevel.CKA_ID, identifier)])[0]
         except:
-            raise SmartCardConnectionError("Certificate has no valid private key")
+            raise SmartCardConnectionError(
+                "Certificate has no valid private key")
         # if you don't print privKey you get a sign general error -.-
         print(privKey, file=open(devnull, "w"))  # to avoid general error
         return privKey
@@ -242,7 +255,8 @@ class SignatureUtils:
                 (LowLevel.CKA_CLASS, LowLevel.CKO_PUBLIC_KEY),
                 (LowLevel.CKA_ID, identifier)])[0]
         except:
-            raise SmartCardConnectionError("Certificate has no valid public key")
+            raise SmartCardConnectionError(
+                "Certificate has no valid public key")
         return pubKey
 
     @staticmethod

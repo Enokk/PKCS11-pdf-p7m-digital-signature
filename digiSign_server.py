@@ -99,6 +99,7 @@ def upload():
             file_paths_to_sign.append(uploaded_file_path)
 
     json_request = {
+        "user_id": "X" * 15,
         "file_list": [],
         "output_path": SIGNED_FOLDER,
         "signed_file_type": output_type
@@ -163,6 +164,7 @@ def sign():
     ###################################
     # request JSON structure:
     # {
+    #     user_id: user_identifier
     #     file_list: [file_path1, file_path2, ...],
     #     signed_file_type: p7m|pdf,
     #     output_path: output_folder_path
@@ -176,6 +178,11 @@ def sign():
     if not request.json:
         error_message = "Missing json request structure"
         return error_response_maker(error_message, invalid_json_request, 404)
+
+    if not "user_id" in request.json:
+        error_message = "missing user_id field"
+        return error_response_maker(error_message, invalid_json_request, 404)
+    user_id = request.json["user_id"]
 
     if not "file_list" in request.json:
         error_message = "missing file_list field"
@@ -216,21 +223,21 @@ def sign():
         MyLogger().my_logger().error(value)
         MyLogger().my_logger().error(
             '\n\t'.join(f"{i}" for i in extract_tb(tb)))
-        clear_pin()
+        clear_pin(user_id)
         return error_response_maker(str(err),
                                     "Controllare che la smart card sia inserita correttamente",
                                     500)
 
     # attempt to login
     try:
-        get_pin()
-        session = DigiSignLib().session_login(sessions, memorized_pin["pin"])
+        get_pin(user_id)
+        session = DigiSignLib().session_login(sessions, memorized_pin[user_id]["pin"])
     except Exception as err:
         _, value, tb = sys.exc_info()
         MyLogger().my_logger().error(value)
         MyLogger().my_logger().error(
             '\n\t'.join(f"{i}" for i in extract_tb(tb)))
-        clear_pin()
+        clear_pin(user_id)
         return error_response_maker(str(err),
                                     "Controllare che il pin sia valido e corretto",
                                     500)
@@ -262,7 +269,7 @@ def sign():
         try:
             if signature_type == P7M:
                 # p7m signature
-                temp_file_path = DigiSignLib().sign_p7m(local_file_path, session)
+                temp_file_path = DigiSignLib().sign_p7m(local_file_path, session, user_id)
             elif signature_type == PDF:
                 # pdf signature
                 # TODO
@@ -316,10 +323,16 @@ def sign():
                 signed_files_list[index]["signed_file"] = "LOST"
                 continue
 
+    # logout
     try:
         DigiSignLib().session_logout(session)
     except:
-        MyLogger().my_logger().warning("logout failed")
+        MyLogger().my_logger().error("logout failed")
+    # session close
+    try:
+        DigiSignLib().session_close(session)
+    except:
+        MyLogger().my_logger().error("session close failed")
     ###################################
     # response JSON structure:
     # { signed_file_list: [
@@ -343,45 +356,47 @@ def sign():
 ####################################################################
 #       UTILITIES                                                  #
 ####################################################################
-def clear_pin():
+def clear_pin(user_id):
     MyLogger().my_logger().info("Clearing PIN")
-    if "timestamp" in memorized_pin:
-        memorized_pin.pop("timestamp")
-    if "pin" in memorized_pin:
-        memorized_pin.pop("pin")
+    if user_id in memorized_pin:
+        if "timestamp" in memorized_pin[user_id]:
+            memorized_pin[user_id].pop("timestamp")
+        if "pin" in memorized_pin[user_id]:
+            memorized_pin[user_id].pop("pin")
 
 
-def get_pin():
+def get_pin(user_id):
     ''' Gets you the `PIN` '''
 
-    if "pin" not in memorized_pin:
-        _get_pin_popup()
-        MyLogger().my_logger().info("QUI NON CI ARRIVA")
-    elif not _is_pin_valid():
+    if user_id not in memorized_pin:
+        memorized_pin[user_id] = {}
+
+    if "pin" not in memorized_pin[user_id]:
+        _get_pin_popup(user_id)
+    elif not _is_pin_valid(user_id):
         MyLogger().my_logger().info("Invalidating PIN")
-        clear_pin()
-        _get_pin_popup()
+        clear_pin(user_id)
+        _get_pin_popup(user_id)
     else:
         MyLogger().my_logger().info("Refreshing PIN")
-        memorized_pin["timestamp"] = datetime.now()
+        memorized_pin[user_id]["timestamp"] = datetime.now()
 
     # check for mishapening
-    if "pin" not in memorized_pin:
+    if "pin" not in memorized_pin[user_id]:
         raise ValueError("No pin inserted")
 
 
-def _is_pin_valid():
+def _is_pin_valid(user_id):
     ''' Check if `PIN` is expired '''
 
-    return datetime.now() < memorized_pin["timestamp"] + timedelta(seconds=PIN_TIMEOUT)
+    return datetime.now() < memorized_pin[user_id]["timestamp"] + timedelta(seconds=PIN_TIMEOUT)
 
 
-def _get_pin_popup():
+def _get_pin_popup(user_id):
     ''' Little popup to input Smart Card PIN '''
 
     MyLogger().my_logger().info("User PIN input")
     widget = Tk()
-    widget.geometry("290x110")
     row = Frame(widget)
     label = Label(row, width=10, text="Insert PIN")
     pinbox = Entry(row, width=15, show='*')
@@ -390,13 +405,11 @@ def _get_pin_popup():
     pinbox.pack(side="right")
 
     def on_enter(evt):
-        memorized_pin["pin"] = pinbox.get()
-        memorized_pin["timestamp"] = datetime.now()
-        widget.destroy()
+        on_click()
 
     def on_click():
-        memorized_pin["pin"] = pinbox.get()
-        memorized_pin["timestamp"] = datetime.now()
+        memorized_pin[user_id]["pin"] = pinbox.get()
+        memorized_pin[user_id]["timestamp"] = datetime.now()
         widget.destroy()
 
     pinbox.bind("<Return>", on_enter)
@@ -409,7 +422,6 @@ def _get_pin_popup():
     widget.attributes("-topmost", True)
     widget.update()
     _center(widget)
-    MyLogger().my_logger().info("QUI SI INCHIODA")
     widget.mainloop()
     
 

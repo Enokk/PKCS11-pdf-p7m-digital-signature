@@ -1,14 +1,19 @@
 from json import load
-from os import environ, path
+from os import environ, path, sys
 from singleton_type import SingletonType
 
 ####################################################################
 #       CONFIGURATION                                              #
 ####################################################################
-PROGRAMFILES = environ["PROGRAMFILES(X86)"]
-BASE_PATH = path.join(PROGRAMFILES, "DigiSign")
+# I need to check if the application is running as a script or
+# as an exe for get the right path
+if getattr(sys, 'frozen', False):
+    BASE_PATH = path.dirname(sys.executable)
+elif __file__:
+    BASE_PATH = path.dirname(__file__)
 JSON_CONFIG_FILE = path.join(BASE_PATH, "digiSign_config.json")
 ####################################################################
+
 
 class MyConfigLoader(object, metaclass=SingletonType):
     _config = None
@@ -21,7 +26,8 @@ class MyConfigLoader(object, metaclass=SingletonType):
             for item in self._config[group]:
                 if item.find("_folder") >= 0:
                     folder_name = self._config[group][item]
-                    self._config[group][item] = path.join(BASE_PATH, folder_name)
+                    self._config[group][item] = path.join(
+                        BASE_PATH, folder_name)
 
     def get_logger_config(self):
         return self._config["logger"]

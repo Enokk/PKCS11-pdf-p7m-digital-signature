@@ -1,16 +1,25 @@
+from datetime import datetime
 from my_logger import MyLogger
-from os import path
+from OpenSSL import crypto
+from os import path, sys
 from p7m_encoder import P7mEncoder
 from signature_util import SignatureUtils
+from tkinter import Tk, Label, Button, Frame
+from traceback import extract_tb
 
 
 # Custom exceptions:
 class P7mCreationError(Exception):
     ''' Raised when failing to create p7m '''
     pass
+class CertificateValidityError(Exception):
+    ''' Raised for validity problems on the certificate '''
+    pass
 
 
 class DigiSignLib():
+
+    PROCEED = None
 
     @staticmethod
     def get_smart_cards_sessions():
@@ -38,7 +47,7 @@ class DigiSignLib():
         return SignatureUtils().user_login(sessions, pin)
 
     @staticmethod
-    def sign_p7m(file_path, open_session):
+    def sign_p7m(file_path, open_session, user_id):
         ''' Return a signed p7m file path
                 The file name will be the same with (firmato) before the extension and .p7m at the end
                 The path will be the same
@@ -55,12 +64,21 @@ class DigiSignLib():
 
         # fetching smart card certificate
         certificate = SignatureUtils().fetch_certificate(open_session)
-        # getting certificate value
+       # getting certificate value
         certificate_value = SignatureUtils().get_certificate_value(
             open_session, certificate)
         # hashing certificate value
         certificate_value_digest = SignatureUtils().digest(
             open_session, certificate_value)
+
+        # check for signer identity
+        # if user_id == "X" * 15, avoid this check
+        if user_id != "X" * 15:
+            # only for REST calls
+            DigiSignLib()._check_certificate_owner(certificate_value, user_id)
+            
+        # check for certificate time validity
+        DigiSignLib()._check_certificate_validity(certificate_value)
 
         # getting signed attributes p7m field
         try:
@@ -120,6 +138,13 @@ class DigiSignLib():
 
         # logout from the session
         SignatureUtils().user_logout(session)
+    
+    @staticmethod
+    def session_close(session):
+        ''' Close smart card `session` '''
+
+        # session close
+        SignatureUtils().close_session(session)
 
     @staticmethod
     def get_file_content(file_path):
@@ -138,3 +163,135 @@ class DigiSignLib():
         MyLogger().my_logger().info(f"saving output to {file_path}")
         with open(file_path, "wb") as file:
             file.write(content)
+
+
+    @staticmethod
+    def _check_certificate_validity(certificate_value):
+        MyLogger().my_logger().info("Chech for certificate time validity")
+        certificate_x509 = crypto.load_certificate(crypto.FILETYPE_ASN1, bytes(certificate_value))
+        # [2:14] gets rid of "b'" at the beginning and "##Z" at the end
+        # precision in minutes
+        notBefore = str(certificate_x509.get_notBefore())[2:14]
+        notAfter = str(certificate_x509.get_notAfter())[2:14]
+        current_time = int(datetime.now().strftime("%Y%m%d%H%M"))
+        
+        try:
+            diff = current_time - int(notBefore)
+        except:
+            raise ValueError(f"Impossible to cast {notBefore} to int")
+        
+        # <= for safety
+        if diff <= 0:
+            DigiSignLib()._not_valid_yet_popup()
+            raise CertificateValidityError("Certificate not valid yet")
+
+        try:
+            diff = int(notAfter) - current_time
+        except:
+            raise ValueError(f"Impossible to cast {notAfter} to int")
+        
+        # <= for safety
+        if diff <= 0:
+            DigiSignLib().PROCEED = None
+            DigiSignLib()._proceed_with_expired_certificate()
+            if DigiSignLib().PROCEED == None:
+                MyLogger().my_logger().error("PROCEED is still None")
+                raise ValueError("Something went wrong with the expired certificate choise popup")
+            if not DigiSignLib().PROCEED:
+                MyLogger().my_logger().warning("User chosen to NOT proceed")
+                raise CertificateValidityError("Certificate expired")
+        MyLogger().my_logger().info("User chosen to proceed")
+
+    @staticmethod
+    def _check_certificate_owner(certificate_value, user_id):
+        MyLogger().my_logger().info("Chech for certificate owner")
+        certificate_x509 = crypto.load_certificate(crypto.FILETYPE_ASN1, bytes(certificate_value))
+        # Codice fiscale is in the last 16 chars
+        subject = certificate_x509.get_subject()
+        # components is a list of 2-tuples
+        components = subject.get_components()
+        MyLogger().my_logger().info(dict(components))
+        # try:
+        #     serial_number = dict(components)[bytes("serialNumber")]
+        #     MyLogger().my_logger().info(serial_number.decode("utf-8"))
+        # except:
+        #     e, _, tb = sys.exc_info()
+        #     MyLogger().my_logger().error(e)
+        #     MyLogger().my_logger().error(
+        #         '\n\t'.join(f"{i}" for i in extract_tb(tb)))
+
+    @staticmethod
+    def _not_valid_yet_popup():
+        ''' Little popup for telling the user that his certificate is not valid yet '''
+
+        MyLogger().my_logger().info("Certificate not valid yet")
+        widget = Tk()
+        row = Frame(widget)
+        label1 = Label(row, text="Il certificato di firma non è ancora valido,")
+        label2 = Label(row, text="firma digitale annullata")
+        row.pack(side="top", padx=60, pady=20)
+        label1.pack(side="top")
+        label2.pack(side="top")
+
+        def on_click():
+            widget.destroy()
+
+        button = Button(widget, command=on_click, text="OK")
+        button.pack(side="top", fill="x", padx=120)
+        filler = Label(widget, height=1, text="")
+        filler.pack(side="top")
+
+        widget.title("Warning")
+        widget.attributes("-topmost", True)
+        widget.update()
+        DigiSignLib()._center(widget)
+        widget.mainloop()
+    
+    @classmethod
+    def _proceed_with_expired_certificate(cls):
+        ''' Little popup for asking the user if he wants to sign with an expired dertificate '''
+
+        MyLogger().my_logger().info("Certificate expired")
+        widget = Tk()
+        row1 = Frame(widget)
+        label1 = Label(row1, text="Il certificato di firma risulta scaduto,")
+        label2 = Label(row1, text="procedere comunque?")
+        row1.pack(side="top", padx=60, pady=20)
+        label1.pack(side="top")
+        label2.pack(side="top")
+
+        def on_click_ok():
+            widget.destroy()
+            cls.PROCEED = True
+
+        def on_click_nok():
+            widget.destroy()
+            cls.PROCEED = False
+
+        row2 = Frame(widget)
+        button_ok = Button(row2, width=10, command=on_click_ok, text="OK")
+        button_nok = Button(row2, width=10, command=on_click_nok, text="Annulla")
+        row2.pack(side="top")
+        button_ok.pack(side="left", padx=10)
+        button_nok.pack(side="right", fill="x", padx=10)
+        filler = Label(widget, height=1, text="")
+        filler.pack(side="top")
+
+        widget.title("Warning")
+        widget.attributes("-topmost", True)
+        widget.update()
+        DigiSignLib()._center(widget)
+        widget.mainloop()
+        
+
+    @staticmethod
+    def _center(widget):
+        ''' Center `widget` on the screen '''
+        screen_width = widget.winfo_screenwidth()
+        screen_height = widget.winfo_screenheight()
+        
+        x = screen_width / 2 - widget.winfo_width() / 2
+        # Little higher than center
+        y = screen_height / 2 - widget.winfo_height()
+
+        widget.geometry(f"+{int(x)}+{int(y)}")

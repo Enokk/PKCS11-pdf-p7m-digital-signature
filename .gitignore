@@ -1,8 +1,7 @@
 __pycache__/
 .vscode/
-log/*
-signed/*
-uploads/*
-digiSign.log
-hash*
-playground.py
+build/
+log/
+signed/
+uploads/
+digiSign_server.spec
