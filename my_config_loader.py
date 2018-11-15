@@ -34,3 +34,6 @@ class MyConfigLoader(object, metaclass=SingletonType):
 
     def get_server_config(self):
         return self._config["server"]
+
+    def get_pdf_config(self):
+        return self._config["pdf_conf"]

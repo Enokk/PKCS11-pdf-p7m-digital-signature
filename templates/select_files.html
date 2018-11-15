@@ -6,6 +6,17 @@
 </head>
 
 <body>
+<script>
+function check_value() {
+    if (document.getElementById("pdf").checked) {
+            document.getElementById("reveal-if-active").innerHTML = 'pdf signature type: ' +
+                '<input type="radio" name="visibility" value="visible" checked="checked" /> visible ' +
+                '<input type="radio" name="visibility" value="invisible" /> invisible<br /><br />'
+    } else {
+        document.getElementById("reveal-if-active").innerHTML = ''
+    }
+}
+</script>
     <div class="container">
         <div class="header">
             <h3 class="text-muted">Digital Signature</h3>
@@ -15,8 +26,10 @@
             <form action="upload" method="post" enctype="multipart/form-data">
                 <input type="file" multiple="" name="files[]" /><br />
                 output type:
-                <input type="radio" name="type" value="p7m" checked="checked" /> p7m
-                <input type="radio" name="type" value="pdf" /> pdf<br /><br />
+                <input type="radio" name="type" value="p7m" checked="checked" onclick="check_value(1)"/> p7m
+                <input id="pdf" type="radio" name="type" value="pdf" onclick="check_value(2)"/> pdf<br /><br />
+                <div id="reveal-if-active">
+                </div>
                 <input type="submit" value="Sign">
             </form>
         </div>

@@ -5,6 +5,7 @@ from os import path, sys
 from p7m_encoder import P7mEncoder
 from signature_util import SignatureUtils
 from tkinter import Tk, Label, Button, Frame
+import pdf_builder
 from traceback import extract_tb
 
 
@@ -12,16 +13,19 @@ from traceback import extract_tb
 class P7mCreationError(Exception):
     ''' Raised when failing to create p7m '''
     pass
+
+
 class CertificateValidityError(Exception):
     ''' Raised for validity problems on the certificate '''
     pass
+
+
 class CertificateOwnerException(Exception):
     ''' Raised if user_cf is not equal to smart card cf '''
     pass
 
 
 class DigiSignLib():
-
     PROCEED = None
 
     @staticmethod
@@ -48,6 +52,44 @@ class DigiSignLib():
 
         # login on the session
         return SignatureUtils().user_login(sessions, pin)
+
+    @staticmethod
+    def sign_pdf(file_path, open_session, user_cf, sig_attributes):
+        ''' Return a signed pdf file path
+                The file name will be the same with (firmato) before the extension and .pdf at the end
+                The path will be the same
+
+            Param:
+                file_path: complete or relative path of the file to sign
+                open_session: logged in session (from login_attempt())
+        '''
+        # fetching smart card certificate
+        certificate = SignatureUtils.fetch_certificate(open_session)
+        # getting certificate value
+        certificate_value = SignatureUtils.get_certificate_value(
+            open_session, certificate)
+
+        # check for signer identity
+        # if user_cf == "X" * 15, avoid this check
+        if user_cf != "X" * 15:
+            # only for REST calls
+            DigiSignLib()._check_certificate_owner(certificate_value, user_cf)
+
+        # check for certificate time validity
+        DigiSignLib()._check_certificate_validity(certificate_value)
+
+        MyLogger().my_logger().info(f"reading pdf file {file_path}")
+        datau = open(file_path, 'rb').read()
+        datas = pdf_builder.sign(datau, open_session, certificate, certificate_value, 'sha256', sig_attributes)
+
+        signed_file_path = DigiSignLib().get_signed_files_path(file_path, 'pdf')
+
+        MyLogger().my_logger().info(f"saving output to {signed_file_path}")
+        with open(signed_file_path, 'wb') as fp:
+            fp.write(datau)
+            fp.write(datas)
+
+        return signed_file_path
 
     @staticmethod
     def sign_p7m(file_path, open_session, user_cf):
@@ -79,7 +121,7 @@ class DigiSignLib():
         if user_cf != "X" * 15:
             # only for REST calls
             DigiSignLib()._check_certificate_owner(certificate_value, user_cf)
-            
+
         # check for certificate time validity
         DigiSignLib()._check_certificate_validity(certificate_value)
 
@@ -124,13 +166,7 @@ class DigiSignLib():
 
         # saves p7m to file
         #   extracting needed part of file path
-        signed_file_base_path = path.dirname(file_path)
-        signed_file_complete_name = path.basename(file_path)
-        signed_file_name = path.splitext(signed_file_complete_name)[0]
-        signed_file_extension = path.splitext(signed_file_complete_name)[1]
-        #   composing final file name
-        final_file_name = f"{signed_file_name}(firmato){signed_file_extension}.p7m"
-        signed_file_path = path.join(signed_file_base_path, final_file_name)
+        signed_file_path = DigiSignLib().get_signed_files_path(file_path, 'p7m')
         DigiSignLib().save_file_content(signed_file_path, output_content)
 
         return signed_file_path
@@ -141,7 +177,7 @@ class DigiSignLib():
 
         # logout from the session
         SignatureUtils().user_logout(session)
-    
+
     @staticmethod
     def session_close(session):
         ''' Close smart card `session` '''
@@ -167,7 +203,6 @@ class DigiSignLib():
         with open(file_path, "wb") as file:
             file.write(content)
 
-
     @staticmethod
     def _check_certificate_validity(certificate_value):
         MyLogger().my_logger().info("Chech for certificate time validity")
@@ -177,12 +212,12 @@ class DigiSignLib():
         notBefore = str(certificate_x509.get_notBefore())[2:14]
         notAfter = str(certificate_x509.get_notAfter())[2:14]
         current_time = int(datetime.now().strftime("%Y%m%d%H%M"))
-        
+
         try:
             diff = current_time - int(notBefore)
         except:
             raise ValueError(f"Impossible to cast {notBefore} to int")
-        
+
         # <= for safety
         if diff <= 0:
             DigiSignLib()._not_valid_yet_popup()
@@ -192,7 +227,7 @@ class DigiSignLib():
             diff = int(notAfter) - current_time
         except:
             raise ValueError(f"Impossible to cast {notAfter} to int")
-        
+
         # <= for safety
         if diff <= 0:
             DigiSignLib().PROCEED = None
@@ -211,7 +246,7 @@ class DigiSignLib():
 
         MyLogger().my_logger().info("Chech for certificate owner")
         certificate_x509 = crypto.load_certificate(crypto.FILETYPE_ASN1, bytes(certificate_value))
-        
+
         subject = certificate_x509.get_subject()
         components = dict(subject.get_components())
         component = components[bytes("serialNumber".encode())]
@@ -221,9 +256,6 @@ class DigiSignLib():
             raise CertificateOwnerException(f"{user_cf} (input) != {codice_fiscale} (smartcard)")
         else:
             MyLogger().my_logger().info("owner verified")
-
-
-        
 
     @staticmethod
     def _not_valid_yet_popup():
@@ -251,7 +283,7 @@ class DigiSignLib():
         widget.update()
         DigiSignLib()._center(widget)
         widget.mainloop()
-    
+
     @classmethod
     def _proceed_with_expired_certificate(cls):
         ''' Little popup for asking the user if he wants to sign with an expired dertificate '''
@@ -287,16 +319,27 @@ class DigiSignLib():
         widget.update()
         DigiSignLib()._center(widget)
         widget.mainloop()
-        
 
     @staticmethod
     def _center(widget):
         ''' Center `widget` on the screen '''
         screen_width = widget.winfo_screenwidth()
         screen_height = widget.winfo_screenheight()
-        
+
         x = screen_width / 2 - widget.winfo_width() / 2
         # Little higher than center
         y = screen_height / 2 - widget.winfo_height()
 
         widget.geometry(f"+{int(x)}+{int(y)}")
+
+    @staticmethod
+    def get_signed_files_path(file_path, sig_type):
+        #   extracting needed part of file path
+        signed_file_base_path = path.dirname(file_path)
+        signed_file_complete_name = path.basename(file_path)
+        signed_file_name = path.splitext(signed_file_complete_name)[0]
+        signed_file_extension = path.splitext(signed_file_complete_name)[1]
+        #   composing final file name
+        final_file_name = f"{signed_file_name}(firmato){signed_file_extension}.{sig_type}"
+        signed_file_path = path.join(signed_file_base_path, final_file_name)
+        return signed_file_path
