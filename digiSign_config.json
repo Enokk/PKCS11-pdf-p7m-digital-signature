@@ -13,5 +13,17 @@
         "log_file_name": "digiSign.log",
         "file_byte_size":51200,
         "log_files_count": 10
-    }
+    },
+    "pdf_conf":{
+		"visibility": "visible",
+        "position" : {
+            "page": "n",
+            "width": 200.0,
+            "height": 60.0,
+            "paddingWidth": 75.0,
+            "paddingHeight": 670.0,
+            "signatureName": "Signature"
+        },
+        "text_template": ""
+	}
 }
