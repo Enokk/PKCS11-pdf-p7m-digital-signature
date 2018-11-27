@@ -6,11 +6,16 @@ from p7m_encoder import P7mEncoder
 from signature_util import SignatureUtils
 from tkinter import Tk, Label, Button, Frame
 import pdf_builder
-from traceback import extract_tb
+from verify import verify
 
 
 # Custom exceptions:
 class P7mCreationError(Exception):
+    ''' Raised when failing to create p7m '''
+    pass
+
+
+class PdfVerificationError(Exception):
     ''' Raised when failing to create p7m '''
     pass
 
@@ -88,6 +93,24 @@ class DigiSignLib():
         with open(signed_file_path, 'wb') as fp:
             fp.write(datau)
             fp.write(datas)
+
+        MyLogger().my_logger().info(f"verifying pdf signatures of {signed_file_path}")
+        try:
+            new_data = open(signed_file_path, 'rb').read()
+            results = verify(new_data, [certificate_value])
+            for key, res in enumerate(results, start=1):
+                print('Signature %d: ' % key, res)
+                MyLogger().my_logger().info(f"Signature {key}: {res}")
+                if not res['hashok?']:
+                    raise PdfVerificationError(f"Hash verification of Signature {key} is failed.")
+                if not res['signatureok?']:
+                    raise PdfVerificationError(f"Signature verification of Signature {key} is failed.")
+                if not res['certok?']:
+                    # TODO verify certificates
+                    MyLogger().my_logger().error(f"Certificate verification of Signature {key} is failed.")
+        except:
+            MyLogger().my_logger().error(f"Error during verification of Signature {key}:")
+            raise
 
         return signed_file_path
 
@@ -252,7 +275,7 @@ class DigiSignLib():
         component = components[bytes("serialNumber".encode())]
         codice_fiscale = component.decode()[-16:]
 
-        if codice_fiscale != user_cf:
+        if codice_fiscale.upper() != user_cf.upper():
             raise CertificateOwnerException(f"{user_cf} (input) != {codice_fiscale} (smartcard)")
         else:
             MyLogger().my_logger().info("owner verified")

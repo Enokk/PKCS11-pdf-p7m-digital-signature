@@ -217,15 +217,6 @@ def sign():
         error_message = "Empty file_list"
         return error_response_maker(error_message, invalid_json_request, 404)
 
-    # if not "signed_file_type" in request.json:
-    #     error_message = "missing signed_file_type field"
-    #     return error_response_maker(error_message, invalid_json_request, 404)
-    # signature_type = request.json["signed_file_type"]
-
-    # if not allowed_signature(signature_type):
-    #     error_message = f"{signature_type} not allowed in signed_file_type field"
-    #     return error_response_maker(error_message, invalid_json_request, 404)
-
     if not "output_path" in request.json:
         error_message = "missing output_path field"
         return error_response_maker(error_message, invalid_json_request, 404)
