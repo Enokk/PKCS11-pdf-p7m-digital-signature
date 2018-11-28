@@ -75,9 +75,11 @@ def upload():
     uploaded_files = request.files.getlist("files[]")
     output_type = request.form["type"]
     visibility = ''
+    p7m_sig_type = ''
     if 'visibility' in request.form:
         visibility = request.form["visibility"]
-
+    if 'p7m_sig_type' in request.form:
+        p7m_sig_type = request.form["p7m_sig_type"]
     # Check for upload and signed folder
     if not path.exists(UPLOAD_FOLDER) or not path.isdir(UPLOAD_FOLDER):
         makedirs(UPLOAD_FOLDER)
@@ -114,6 +116,7 @@ def upload():
                 "padding_width": 75.0,
                 "padding_height": 670.0
             },
+            "p7m_sig_type": p7m_sig_type,
             "text_template": ""
         }
     }
@@ -270,6 +273,12 @@ def sign():
             error_message = f"{signature_type} not allowed in signed_file_type field"
             return error_response_maker(error_message, invalid_json_request, 404)
 
+        if "sig_attributes" in file_path_to_sign:
+            sig_attributes = file_path_to_sign["sig_attributes"]
+        else:
+            MyLogger().my_logger().error(f"missing sig_attributes field for file {file_path_to_sign['file']}")
+            continue
+
         # initialize response structure
         output_item = {"file_to_sign": file_path_to_sign["file"],
                        "signed": "",
@@ -293,18 +302,12 @@ def sign():
         try:
             if signature_type == P7M:
                 # p7m signature
-                temp_file_path = DigiSignLib().sign_p7m(local_file_path, session, user_id)
+                temp_file_path = DigiSignLib().sign_p7m(local_file_path, session, user_id, sig_attributes)
             elif signature_type == PDF:
                 # pdf signature
                 mime = mimetypes.MimeTypes().guess_type(local_file_path)[0]
                 if mime == 'application/pdf':
-                    if "sig_attributes" in file_path_to_sign:
-                        sig_attributes = file_path_to_sign["sig_attributes"]
-                        temp_file_path = DigiSignLib().sign_pdf(local_file_path, session, user_id, sig_attributes)
-                    else:
-                        MyLogger().my_logger().error("missing sig_attribyutes field")
-                        signed_files_list[index]["signed"] = "no"
-                        continue
+                    temp_file_path = DigiSignLib().sign_pdf(local_file_path, session, user_id, sig_attributes)
                 else:
                     MyLogger().my_logger().info(f"the file {local_file_path} is not a pdf will be ignored")
                     signed_files_list[index]["signed"] = "no"

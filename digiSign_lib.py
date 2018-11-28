@@ -1,12 +1,14 @@
+import mimetypes
 from datetime import datetime
+from asn1crypto import cms
 from my_logger import MyLogger
 from OpenSSL import crypto
 from os import path, sys
-from p7m_encoder import P7mEncoder
+from p7m_encoder import P7mEncoder, P7mAttributes
 from signature_util import SignatureUtils
 from tkinter import Tk, Label, Button, Frame
-import pdf_builder
 from verify import verify
+import pdf_builder
 
 
 # Custom exceptions:
@@ -115,7 +117,7 @@ class DigiSignLib():
         return signed_file_path
 
     @staticmethod
-    def sign_p7m(file_path, open_session, user_cf):
+    def sign_p7m(file_path, open_session, user_cf, sig_attrs):
         ''' Return a signed p7m file path
                 The file name will be the same with (firmato) before the extension and .p7m at the end
                 The path will be the same
@@ -124,9 +126,23 @@ class DigiSignLib():
                 file_path: complete or relative path of the file to sign
                 open_session: logged in session (from login_attempt())
         '''
-
+        # fetching sig type
+        sig_type = sig_attrs['p7m_sig_type']
         # fetching file content
         file_content = DigiSignLib().get_file_content(file_path)
+        # check existing signatures
+        p7m_attrs = P7mAttributes(b'', b'', b'')
+        mime = mimetypes.MimeTypes().guess_type(file_path)[0]
+        if mime == 'application/pkcs7':
+            info = cms.ContentInfo.load(file_content)
+            # retrieving existing signatures attributes
+            signed_data = info['content']
+            p7m_attrs.algos = signed_data['digest_algorithms'].contents
+            p7m_attrs.certificates = signed_data['certificates'].contents
+            p7m_attrs.signer_infos = signed_data['signer_infos'].contents
+            if sig_type == 'parallel':
+                file_content = signed_data['encap_content_info'].native['content']
+
         # hashing file content
         file_content_digest = SignatureUtils().digest(open_session, file_content)
 
@@ -176,14 +192,14 @@ class DigiSignLib():
         try:
             signer_info = P7mEncoder().encode_signer_info(
                 issuer, serial_number, signed_attributes,
-                signed_attributes_signed)
+                signed_attributes_signed, p7m_attrs.signer_infos)
         except:
             raise P7mCreationError("Exception on encoding signer info")
 
         # create the p7m content
         try:
             output_content = P7mEncoder().make_a_p7m(
-                file_content, certificate_value, signer_info)
+                file_content, certificate_value, signer_info, p7m_attrs)
         except:
             raise P7mCreationError("Exception on encoding p7m file content")
 
@@ -360,9 +376,14 @@ class DigiSignLib():
         #   extracting needed part of file path
         signed_file_base_path = path.dirname(file_path)
         signed_file_complete_name = path.basename(file_path)
-        signed_file_name = path.splitext(signed_file_complete_name)[0]
-        signed_file_extension = path.splitext(signed_file_complete_name)[1]
+        signed_file_name, signed_file_extension = path.splitext(signed_file_complete_name)
+        # signed_file_extension = path.splitext(signed_file_complete_name)[1]
         #   composing final file name
-        final_file_name = f"{signed_file_name}(firmato){signed_file_extension}.{sig_type}"
+        start = signed_file_name.find('firmato')
+        if start != -1:
+            signed_file_name = signed_file_name.replace('firmato', '')
+            final_file_name = f"{signed_file_name[:start]}(firmato){signed_file_name[start:]}{signed_file_extension}.{sig_type}"
+        else:
+            final_file_name = f"{signed_file_name}(firmato){signed_file_extension}.{sig_type}"
         signed_file_path = path.join(signed_file_base_path, final_file_name)
         return signed_file_path
