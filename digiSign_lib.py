@@ -139,8 +139,9 @@ class DigiSignLib():
             signed_data = info['content']
             p7m_attrs.algos = signed_data['digest_algorithms'].contents
             p7m_attrs.certificates = signed_data['certificates'].contents
-            p7m_attrs.signer_infos = signed_data['signer_infos'].contents
+            #
             if sig_type == 'parallel':
+                p7m_attrs.signer_infos = signed_data['signer_infos'].contents
                 file_content = signed_data['encap_content_info'].native['content']
 
         # hashing file content
@@ -205,7 +206,7 @@ class DigiSignLib():
 
         # saves p7m to file
         #   extracting needed part of file path
-        signed_file_path = DigiSignLib().get_signed_files_path(file_path, 'p7m')
+        signed_file_path = DigiSignLib().get_signed_files_path(file_path, 'p7m', sig_type)
         DigiSignLib().save_file_content(signed_file_path, output_content)
 
         return signed_file_path
@@ -372,18 +373,19 @@ class DigiSignLib():
         widget.geometry(f"+{int(x)}+{int(y)}")
 
     @staticmethod
-    def get_signed_files_path(file_path, sig_type):
+    def get_signed_files_path(file_path, sig_type, p7m_sig_type=None):
         #   extracting needed part of file path
         signed_file_base_path = path.dirname(file_path)
         signed_file_complete_name = path.basename(file_path)
         signed_file_name, signed_file_extension = path.splitext(signed_file_complete_name)
-        # signed_file_extension = path.splitext(signed_file_complete_name)[1]
         #   composing final file name
         start = signed_file_name.find('firmato')
         if start != -1:
             signed_file_name = signed_file_name.replace('firmato', '')
-            final_file_name = f"{signed_file_name[:start]}(firmato){signed_file_name[start:]}{signed_file_extension}.{sig_type}"
+            final_file_name = f"{signed_file_name[:start]}(firmato){signed_file_name[start:]}{signed_file_extension}"
         else:
-            final_file_name = f"{signed_file_name}(firmato){signed_file_extension}.{sig_type}"
+            final_file_name = f"{signed_file_name}(firmato){signed_file_extension}"
+        if p7m_sig_type != 'parallel' and sig_type != 'pdf':
+            final_file_name = final_file_name + f".{sig_type}"
         signed_file_path = path.join(signed_file_base_path, final_file_name)
         return signed_file_path
