@@ -22,10 +22,17 @@ SIGNING_CERTIFICATE_V2 = "1.2.840.113549.1.9.16.2.47"
 ####################################################################
 
 
+class P7mAttributes:
+    def __init__(self, algos, certificates, signer_infos):
+        self.algos = algos
+        self.certificates = certificates
+        self.signer_infos = signer_infos
+
+
 class P7mEncoder:
 
     @staticmethod
-    def make_a_p7m(content, certificate_value, signer_info):
+    def make_a_p7m(content, certificate_value, signer_info, p7m_sig_attrs: P7mAttributes):
         '''
             Return a well formed complete p7m
 
@@ -33,6 +40,7 @@ class P7mEncoder:
                 content: file content to sign
                 certificate_value: value field of the smart card certificate
                 signer_info: signer info in asn1 form
+                p7m_sig_attrs: existing p7m signatures attributes
         '''
 
         p7m = Encoder()
@@ -45,11 +53,11 @@ class P7mEncoder:
         p7m.enter(Numbers.Sequence)  # 3
         p7m._emit(P7mEncoder._version_number())
         p7m.enter(Numbers.Set)  # 4
-        p7m._emit(P7mEncoder._digest_algorithm())
+        p7m._emit(P7mEncoder._digest_algorithm() + p7m_sig_attrs.algos)
         p7m.leave()  # 4
         p7m._emit(P7mEncoder._content_info(content))
         p7m.enter(ZERO_TAG, Classes.Context)  # 4
-        p7m._emit(certificate_value)
+        p7m._emit(certificate_value + p7m_sig_attrs.certificates)
         p7m.leave()  # 4
         p7m._emit(signer_info)
         p7m.leave()  # 3
@@ -60,7 +68,7 @@ class P7mEncoder:
 
     @staticmethod
     def encode_signer_info(issuer, serial_number,
-                           signed_attributes, signed_bytes):
+                           signed_attributes, signed_bytes, existing_sig_infos):
         ''' Return a well formed signer info p7m field
 
             Params:
@@ -98,6 +106,8 @@ class P7mEncoder:
         signer_info.write(signed_bytes, Numbers.OctetString)
 
         signer_info.leave()  # 2
+        if existing_sig_infos != b'':
+            signer_info._emit(existing_sig_infos)
         signer_info.leave()  # 1
 
         return signer_info.output()
@@ -208,13 +218,13 @@ class P7mEncoder:
         return version_number.output()
 
     @staticmethod
-    def _digest_algorithm():
+    def _digest_algorithm(algo=SHA256):
         '''Return p7m digest algorithm field (SHA256)'''
         digest_algorithm = Encoder()
         digest_algorithm.start()
 
         digest_algorithm.enter(Numbers.Sequence)  # 1
-        digest_algorithm.write(SHA256, Numbers.ObjectIdentifier)
+        digest_algorithm.write(algo, Numbers.ObjectIdentifier)
         digest_algorithm.write(0, Numbers.Null)
         digest_algorithm.leave()  # 1
 
