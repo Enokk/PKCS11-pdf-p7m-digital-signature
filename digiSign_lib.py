@@ -1,9 +1,9 @@
-import mimetypes
-from datetime import datetime
 from asn1crypto import cms
+from datetime import datetime
+from mimetypes import MimeTypes
 from my_logger import MyLogger
 from OpenSSL import crypto
-from os import path, sys
+from os import path
 from p7m_encoder import P7mEncoder, P7mAttributes
 from signature_util import SignatureUtils
 from tkinter import Tk, Label, Button, Frame
@@ -11,25 +11,23 @@ from verify import verify
 import pdf_builder
 
 
+
 # Custom exceptions:
 class P7mCreationError(Exception):
     ''' Raised when failing to create p7m '''
     pass
 
-
 class PdfVerificationError(Exception):
-    ''' Raised when failing to create p7m '''
     pass
-
 
 class CertificateValidityError(Exception):
     ''' Raised for validity problems on the certificate '''
     pass
 
-
 class CertificateOwnerException(Exception):
     ''' Raised if user_cf is not equal to smart card cf '''
     pass
+
 
 
 class DigiSignLib():
@@ -44,6 +42,7 @@ class DigiSignLib():
         '''
         # getting a smart card session
         return SignatureUtils().fetch_smart_card_sessions()
+
 
     @staticmethod
     def session_login(sessions, pin):
@@ -126,13 +125,14 @@ class DigiSignLib():
                 file_path: complete or relative path of the file to sign
                 open_session: logged in session (from login_attempt())
         '''
+
         # fetching sig type
         sig_type = sig_attrs['p7m_sig_type']
         # fetching file content
         file_content = DigiSignLib().get_file_content(file_path)
         # check existing signatures
         p7m_attrs = P7mAttributes(b'', b'', b'')
-        mime = mimetypes.MimeTypes().guess_type(file_path)[0]
+        mime = MimeTypes().guess_type(file_path)[0]
         if mime == 'application/pkcs7':
             info = cms.ContentInfo.load(file_content)
             # retrieving existing signatures attributes
@@ -205,11 +205,11 @@ class DigiSignLib():
             raise P7mCreationError("Exception on encoding p7m file content")
 
         # saves p7m to file
-        #   extracting needed part of file path
         signed_file_path = DigiSignLib().get_signed_files_path(file_path, 'p7m', sig_type)
         DigiSignLib().save_file_content(signed_file_path, output_content)
 
         return signed_file_path
+
 
     @staticmethod
     def session_logout(session):
@@ -218,12 +218,14 @@ class DigiSignLib():
         # logout from the session
         SignatureUtils().user_logout(session)
 
+
     @staticmethod
     def session_close(session):
         ''' Close smart card `session` '''
 
         # session close
         SignatureUtils().close_session(session)
+
 
     @staticmethod
     def get_file_content(file_path):
@@ -235,6 +237,7 @@ class DigiSignLib():
 
         return file_content
 
+
     @staticmethod
     def save_file_content(file_path, content):
         ''' Save content to `file_path` '''
@@ -242,6 +245,7 @@ class DigiSignLib():
         MyLogger().my_logger().info(f"saving output to {file_path}")
         with open(file_path, "wb") as file:
             file.write(content)
+
 
     @staticmethod
     def _check_certificate_validity(certificate_value):
@@ -280,6 +284,7 @@ class DigiSignLib():
                 raise CertificateValidityError("Certificate expired")
         MyLogger().my_logger().info("User chosen to proceed")
 
+
     @staticmethod
     def _check_certificate_owner(certificate_value, user_cf):
         ''' Check if user_cf is equal to smart card cf. Raise a `CertificateOwnerException` '''
@@ -296,6 +301,7 @@ class DigiSignLib():
             raise CertificateOwnerException(f"{user_cf} (input) != {codice_fiscale} (smartcard)")
         else:
             MyLogger().my_logger().info("owner verified")
+
 
     @staticmethod
     def _not_valid_yet_popup():
@@ -323,6 +329,7 @@ class DigiSignLib():
         widget.update()
         DigiSignLib()._center(widget)
         widget.mainloop()
+
 
     @classmethod
     def _proceed_with_expired_certificate(cls):
@@ -360,6 +367,7 @@ class DigiSignLib():
         DigiSignLib()._center(widget)
         widget.mainloop()
 
+
     @staticmethod
     def _center(widget):
         ''' Center `widget` on the screen '''
@@ -371,6 +379,7 @@ class DigiSignLib():
         y = screen_height / 2 - widget.winfo_height()
 
         widget.geometry(f"+{int(x)}+{int(y)}")
+
 
     @staticmethod
     def get_signed_files_path(file_path, sig_type, p7m_sig_type=None):

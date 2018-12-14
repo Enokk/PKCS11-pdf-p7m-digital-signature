@@ -1,6 +1,8 @@
 from json import load
-from os import environ, path, sys
+from os import path, sys
 from singleton_type import SingletonType
+
+
 
 ####################################################################
 #       CONFIGURATION                                              #
@@ -29,8 +31,10 @@ class MyConfigLoader(object, metaclass=SingletonType):
                     self._config[group][item] = path.join(
                         BASE_PATH, folder_name)
 
+
     def get_logger_config(self):
         return self._config["logger"]
+
 
     def get_server_config(self):
         return self._config["server"]

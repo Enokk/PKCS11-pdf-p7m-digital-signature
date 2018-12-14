@@ -3,6 +3,7 @@ from datetime import datetime
 from my_logger import MyLogger
 
 
+
 ####################################################################
 #       CONFIGURATION                                              #
 ####################################################################
@@ -66,6 +67,7 @@ class P7mEncoder:
 
         return p7m.output()
 
+
     @staticmethod
     def encode_signer_info(issuer, serial_number,
                            signed_attributes, signed_bytes, existing_sig_infos):
@@ -112,6 +114,7 @@ class P7mEncoder:
 
         return signer_info.output()
 
+
     @staticmethod
     def encode_signed_attributes(content_hash, certificate_hash):
         ''' Return a well formed signed attributes p7m field
@@ -132,6 +135,7 @@ class P7mEncoder:
 
         return signed_attributes.output()
 
+
     @staticmethod
     def bytes_to_sign(content_hash, certificate_hash):
         ''' Return the p7m part that needs to be signed
@@ -151,6 +155,7 @@ class P7mEncoder:
         signed_attributes.leave()
 
         return signed_attributes.output()
+
 
     @staticmethod
     def _get_signed_attributes(content_hash, certificate_hash):
@@ -206,6 +211,7 @@ class P7mEncoder:
 
         return signed_attributes.output()
 
+
     @staticmethod
     def _version_number():
         '''Return p7m version number field (always 1)'''
@@ -217,9 +223,10 @@ class P7mEncoder:
 
         return version_number.output()
 
+
     @staticmethod
     def _digest_algorithm(algo=SHA256):
-        '''Return p7m digest algorithm field (SHA256)'''
+        '''Return p7m digest algorithm field (default SHA256)'''
         digest_algorithm = Encoder()
         digest_algorithm.start()
 
@@ -229,6 +236,7 @@ class P7mEncoder:
         digest_algorithm.leave()  # 1
 
         return digest_algorithm.output()
+
 
     @staticmethod
     def _content_info(content):
@@ -245,6 +253,7 @@ class P7mEncoder:
         data_content.leave()  # 1
 
         return data_content.output()
+
 
     @staticmethod
     def _get_timestamp():

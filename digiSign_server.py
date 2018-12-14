@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from digiSign_lib import DigiSignLib, CertificateOwnerException
 from flask import Flask, render_template, request, send_from_directory, make_response, Response, jsonify
 from flask_cors import CORS, cross_origin
+from mimetypes import MimeTypes
 from my_config_loader import MyConfigLoader
 from my_logger import MyLogger
 from os import path, remove, sys, listdir, fsdecode, makedirs, environ
@@ -12,8 +13,8 @@ from traceback import extract_tb
 from urllib import request as urlfile
 from werkzeug.utils import secure_filename
 from zipfile import ZipFile
-import json
-import mimetypes
+
+
 
 ####################################################################
 #       CONFIGURATION                                              #
@@ -42,26 +43,6 @@ server = Flask(__name__, template_folder=TEMPLATE_FOLDER)
 CORS(server, resources={r"/api/*": {"origins": "*"}})
 
 
-def allowed_signature(signature_type):
-    ''' Returns if `signature_type` is allowed '''
-    return signature_type.lower() in ALLOWED_SIGNATURE_TYPES
-
-
-def error_response_maker(error_message, user_tip, status):
-    ''' Returns an HTTP error response with HTTP_status = `status`.
-
-            body structure:
-
-            {
-                error_message: error_message,
-                user_tip: user_tip
-            }
-    '''
-
-    MyLogger().my_logger().error(error_message)
-    return make_response(jsonify({"error_message": error_message, "user_tip": user_tip}), status)
-
-
 ####################################################################
 #       SIGN WEB                                                   #
 ####################################################################
@@ -80,17 +61,10 @@ def upload():
         visibility = request.form["visibility"]
     if 'p7m_sig_type' in request.form:
         p7m_sig_type = request.form["p7m_sig_type"]
-    # Check for upload and signed folder
-    if not path.exists(UPLOAD_FOLDER) or not path.isdir(UPLOAD_FOLDER):
-        makedirs(UPLOAD_FOLDER)
-    if not path.exists(SIGNED_FOLDER) or not path.isdir(SIGNED_FOLDER):
-        makedirs(SIGNED_FOLDER)
 
-    # Folders cleanup
+    # Folder cleanup
     for _file in listdir(UPLOAD_FOLDER):
         remove(path.join(UPLOAD_FOLDER, _file))
-    for _file in listdir(SIGNED_FOLDER):
-        remove(path.join(SIGNED_FOLDER, _file))
 
     file_paths_to_sign = []
     # Foreach file uploaded
@@ -104,7 +78,7 @@ def upload():
             # Path added to files to sign
             file_paths_to_sign.append(uploaded_file_path)
 
-    file = {
+    json_file = {
         "file": "",
         "signed_file_type": output_type,
         "sig_attributes": {
@@ -128,15 +102,15 @@ def upload():
     }
 
     for _file in file_paths_to_sign:
-        file = file.copy()
-        file.update({"file": _file})
-        json_request["file_list"].append(file)
+        json_file = json_file.copy()
+        json_file.update({"file": _file})
+        json_request["file_list"].append(json_file)
 
-    json_request = json.dumps(json_request)
     url = f"http://{HOST}:{PORT}/api/sign"
+
     if "HTTP_PROXY" in environ:
         del environ["HTTP_PROXY"]
-    res = post(url=url, data=json_request,
+    res = post(url=url, json=json_request,
                headers={'Content-Type': 'application/json'})
 
     if res.status_code != 200:
@@ -183,7 +157,7 @@ def zip_and_download_logs():
 
 
 ####################################################################
-#       REST SIGN API                                              #
+#       REST API                                                   #
 ####################################################################
 @server.route("/api/sign", methods=["POST"])
 @cross_origin()
@@ -192,8 +166,18 @@ def sign():
     # request JSON structure:
     # {
     #     user_id: codice_fiscale // "X"*15 to skip check
-    #     file_list: [file_path1, file_path2, ...],
-    #     signed_file_type: p7m|pdf,
+    #     file_list: [
+    #         { 
+    #             file: file_path,
+    #             signed_file_type: p7m|pdf
+    #         },
+	# TODO sistema struttura
+    #         { 
+    #             file: file_path,
+    #             signed_file_type: p7m|pdf
+    #         },
+    #         ...
+    #     ],
     #     output_path: output_folder_path
     # }
     ###################################
@@ -220,6 +204,28 @@ def sign():
         error_message = "Empty file_list"
         return error_response_maker(error_message, invalid_json_request, 404)
 
+    for json_file in file_list:
+        if not "file" in json_file:
+            error_message = "missing file field"
+            return error_response_maker(error_message, invalid_json_request, 404)
+
+        if not "signed_file_type" in json_file:
+            error_message = "missing signed_file_type field"
+            return error_response_maker(error_message, invalid_json_request, 404)
+        sig_type = json_file["signed_file_type"]
+
+        if not allowed_signature(sig_type):
+            error_message = f"{sig_type} not allowed in signed_file_type field"
+            return error_response_maker(error_message, invalid_json_request, 404)
+
+        if "sig_attributes" in json_file:
+            sig_attributes = json_file["sig_attributes"]
+        else:
+            MyLogger().my_logger().error(f"missing sig_attributes field for file {json_file['file']}")
+            continue
+
+		# TODO check altri campi
+
     if not "output_path" in request.json:
         error_message = "missing output_path field"
         return error_response_maker(error_message, invalid_json_request, 404)
@@ -232,6 +238,10 @@ def sign():
         if not path.exists(path_for_signed_files) or not path.isdir(path_for_signed_files):
             error_message = f"{path_for_signed_files} field is not a valid directory"
             return error_response_maker(error_message, invalid_json_request, 404)
+
+    # folder cleanup
+    for _file in listdir(SIGNED_FOLDER):
+        remove(path.join(SIGNED_FOLDER, _file))
 
     # getting smart cards connected
     try:
@@ -262,31 +272,19 @@ def sign():
 
     # loop on given files
     signed_files_list = []
-    for index, file_path_to_sign in enumerate(file_list):
-        # gestire meglio questa parte
-        if not "signed_file_type" in file_path_to_sign:
-            error_message = "missing signed_file_type field"
-            return error_response_maker(error_message, invalid_json_request, 404)
-        signature_type = file_path_to_sign["signed_file_type"]
-
-        if not allowed_signature(signature_type):
-            error_message = f"{signature_type} not allowed in signed_file_type field"
-            return error_response_maker(error_message, invalid_json_request, 404)
-
-        if "sig_attributes" in file_path_to_sign:
-            sig_attributes = file_path_to_sign["sig_attributes"]
-        else:
-            MyLogger().my_logger().error(f"missing sig_attributes field for file {file_path_to_sign['file']}")
-            continue
+    for index, file_to_sign in enumerate(file_list):
+        # already checked
+        signature_type = file_to_sign["signed_file_type"]
+        file_path_to_sign = file_to_sign["file"]
 
         # initialize response structure
-        output_item = {"file_to_sign": file_path_to_sign["file"],
+        output_item = {"file_to_sign": file_path_to_sign,
                        "signed": "",
                        "signed_file": ""}
         signed_files_list.append(output_item)
 
         # handle url file paths
-        if file_path_to_sign["file"].startswith("http://"):
+        if file_path_to_sign.startswith("http://"):
             try:
                 local_file_path = downoad_file(file_path_to_sign)
             except:
@@ -298,14 +296,15 @@ def sign():
                 signed_files_list[index]["signed"] = "no"
                 continue
         else:
-            local_file_path = file_path_to_sign["file"]
+            local_file_path = file_path_to_sign
+
         try:
             if signature_type == P7M:
                 # p7m signature
                 temp_file_path = DigiSignLib().sign_p7m(local_file_path, session, user_id, sig_attributes)
             elif signature_type == PDF:
                 # pdf signature
-                mime = mimetypes.MimeTypes().guess_type(local_file_path)[0]
+                mime = MimeTypes().guess_type(local_file_path)[0]
                 if mime == 'application/pdf':
                     temp_file_path = DigiSignLib().sign_pdf(local_file_path, session, user_id, sig_attributes)
                 else:
@@ -315,7 +314,9 @@ def sign():
 
             signed_files_list[index]["signed"] = "yes"
         except CertificateOwnerException as err:
-            user_tip = "Il codice del certificato e' diverso da quello dell'utente. Impossibile procedere."
+            user_tip = "Codice fiscale dell'utente non corrispondente a quello della smart card. Impossibile procedere."
+            DigiSignLib().session_logout(session)
+            DigiSignLib().session_close(session)
             return error_response_maker(str(err), user_tip, 500)
         except:
             _, value, tb = sys.exc_info()
@@ -364,6 +365,10 @@ def sign():
                 signed_files_list[index]["signed_file"] = "LOST"
                 continue
 
+    # Folder cleanup
+    for _file in listdir(UPLOAD_FOLDER):
+        remove(path.join(UPLOAD_FOLDER, _file))
+
     # logout
     try:
         DigiSignLib().session_logout(session)
@@ -397,6 +402,26 @@ def sign():
 ####################################################################
 #       UTILITIES                                                  #
 ####################################################################
+def allowed_signature(signature_type):
+    ''' Returns if `signature_type` is allowed '''
+    return signature_type.lower() in ALLOWED_SIGNATURE_TYPES
+
+
+def error_response_maker(error_message, user_tip, status):
+    ''' Returns an HTTP error response with HTTP_status = `status`.
+
+            body structure:
+
+            {
+                error_message: error_message,
+                user_tip: user_tip
+            }
+    '''
+
+    MyLogger().my_logger().error(error_message)
+    return make_response(jsonify({"error_message": error_message, "user_tip": user_tip}), status)
+
+
 def clear_pin(user_id):
     MyLogger().my_logger().info("Clearing PIN")
     if user_id in memorized_pin:
@@ -499,6 +524,12 @@ def downoad_file(file_url):
 def server_start():
     MyLogger().my_logger().info("Server started!")
 
+    # Check for upload and signed folder
+    if not path.exists(UPLOAD_FOLDER) or not path.isdir(UPLOAD_FOLDER):
+        makedirs(UPLOAD_FOLDER)
+    if not path.exists(SIGNED_FOLDER) or not path.isdir(SIGNED_FOLDER):
+        makedirs(SIGNED_FOLDER)
+
     try:
         server.run(
             host=HOST,
@@ -510,5 +541,8 @@ def server_start():
         pass
 
 
+####################################################################
+#       MAIN                                                       #
+####################################################################
 if __name__ == "__main__":
     server_start()

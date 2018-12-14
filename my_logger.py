@@ -5,6 +5,7 @@ from os import path, mkdir
 from singleton_type import SingletonType
 
 
+
 ####################################################################
 #       CONFIGURATION                                              #
 ####################################################################
@@ -35,6 +36,7 @@ class MyLogger(object, metaclass=SingletonType):
         self._logger.addHandler(handler)
 
         self._logger.info("  ---  Started logger  ---")
+
 
     def my_logger(self):
         return self._logger

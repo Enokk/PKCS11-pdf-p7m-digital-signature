@@ -1,8 +1,8 @@
 from my_config_loader import MyConfigLoader
 from my_logger import MyLogger
-from os import listdir, devnull, fsdecode, sys
+from os import listdir, devnull, fsdecode
 from PyKCS11 import PyKCS11Lib, Mechanism, LowLevel
-from traceback import extract_tb
+
 
 
 ####################################################################
@@ -68,6 +68,7 @@ class SignatureUtils:
 
         return sessions
 
+
     @staticmethod
     def _fetch_slots(pkcs11_lib):
         ''' Return a `slot list` (connected Smart Cards) '''
@@ -82,12 +83,14 @@ class SignatureUtils:
         except:
             raise SmartCardConnectionError("No smart card slot found")
 
+
     @staticmethod
     def close_session(session):
         ''' Close smart card `session` '''
 
         MyLogger().my_logger().info("Close smart card session")
         session.closeSession()
+
 
     @staticmethod
     def user_login(sessions, pin):
@@ -113,6 +116,7 @@ class SignatureUtils:
         raise SmartCardConnectionError(
             "Can not login on any sessions provided")
 
+
     @staticmethod
     def user_logout(session):
         ''' 
@@ -124,6 +128,7 @@ class SignatureUtils:
 
         MyLogger().my_logger().info("user logout")
         session.logout()
+
 
     @staticmethod
     def fetch_certificate(session):
@@ -145,6 +150,7 @@ class SignatureUtils:
         certificate = certificates[1]
         return certificate
 
+
     @staticmethod
     def get_certificate_value(session, certificate):
         ''' 
@@ -164,6 +170,7 @@ class SignatureUtils:
 
         return bytes(certificate_value)
 
+
     @staticmethod
     def get_certificate_issuer(session, certificate):
         ''' 
@@ -182,6 +189,7 @@ class SignatureUtils:
             raise SmartCardConnectionError("Certificate has no valid issuer")
 
         return bytes(certificate_issuer)
+
 
     @staticmethod
     def get_certificate_serial_number(session, certificate):
@@ -209,6 +217,7 @@ class SignatureUtils:
                 "Can not cast certificate serial number to integer")
         return int_serial_number
 
+
     @staticmethod
     def fetch_private_key(session, certificate):
         ''' 
@@ -235,6 +244,7 @@ class SignatureUtils:
         print(privKey, file=open(devnull, "w"))  # to avoid general error
         return privKey
 
+
     @staticmethod
     def fetch_public_key(session, certificate):
         ''' 
@@ -259,6 +269,7 @@ class SignatureUtils:
                 "Certificate has no valid public key")
         return pubKey
 
+
     @staticmethod
     def digest(session, content):
         ''' 
@@ -276,6 +287,7 @@ class SignatureUtils:
             raise SmartCardConnectionError("Failed on digest content")
 
         return bytes(digest)
+
 
     @staticmethod
     def signature(session, privKey, content):
